@@ -1,0 +1,72 @@
+/*
+ * pcf8574.h - Copyright (c) 2023 Andre M. Maree/KSS Technologies (Pty) Ltd.
+ */
+
+#pragma once
+
+#include "hal_i2cm.h"									// +x_struct_union +stdint
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+// ######################################## Enumerations ###########################################
+
+typedef enum {
+	#if (halHAS_PCF8574 > 0)
+	pcf8574IO0,
+	pcf8574IO1,
+	pcf8574IO2,
+	pcf8574IO3,
+	pcf8574IO4,
+	pcf8574IO5,
+	pcf8574IO6,
+	pcf8574IO7,
+	#endif
+	#if (halHAS_PCF8574 > 1)
+	pcf8574IO8,
+	pcf8574IO9,
+	pcf8574IO10,
+	pcf8574IO11,
+	pcf8574IO12,
+	pcf8574IO13,
+	pcf8574IO14,
+	pcf8574IO15,
+	#endif
+	pcf8574NUM_PINS
+} pcf8574_io_t;
+
+// ######################################### Structures ############################################
+
+typedef struct __attribute__((packed)) pcf8574_t {
+	i2c_di_t * psI2C;
+	u8_t Mask;						//	all In=0xFF, all Out=0x00
+	u8_t Rbuf;
+	u8_t Wbuf;
+	bool fDirty;
+} pcf8574_t;
+DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
+
+// ####################################### Public variables ########################################
+
+extern u8_t pcf8574Num;
+extern pcf8574_t sPCF8574[];
+
+// ####################################### Global functions ########################################
+
+void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir);
+bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan);
+void pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState, bool Now);
+void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan, bool Now);
+
+int	pcf8574Identify(i2c_di_t * psI2C_DI);
+int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
+int	pcf8574Config(i2c_di_t * psI2C_DI);
+void pcf8574ReConfig(i2c_di_t * psI2C_DI);
+
+void pcf8574Report(void);
+
+#ifdef __cplusplus
+}
+#endif
