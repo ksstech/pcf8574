@@ -154,6 +154,7 @@ int	pcf8574Identify(i2c_di_t * psI2C_DI) {
 
 int	pcf8574Config(i2c_di_t * psI2C_DI) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
+	pcf8574ReConfig(psI2C_DI);
 	return erSUCCESS;
 }
 
@@ -161,10 +162,13 @@ int	pcf8574Diagnostics(i2c_di_t * psI2C_DI) { return erSUCCESS; }
 
 void pcf8574ReConfig(i2c_di_t * psI2C_DI) { return; }
 
-void pcf8574Report(void) {
+int pcf8574Report(report_t * psR) {
+	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
-		halI2C_DeviceReport((void *) &sPCF8574[i].psI2C);
-		printfx("Rbuf=0x%02hX  Wbuf=0x%02hX\r\n\n", sPCF8574[i].Rbuf, sPCF8574[i].Wbuf);
+		iRV += halI2C_DeviceReport(psR, (void *) &sPCF8574[i].psI2C);
+		iRV += wprintfx(psR, "Rbuf=0x%02hX  Wbuf=0x%02hX  #IRQs=%lu  #Events=%lu\r\n\n",
+			sPCF8574[i].Rbuf, sPCF8574[i].Wbuf, xIDI_LostIRQs, xIDI_LostEvents);
 	}
+	return iRV;
 }
 #endif
