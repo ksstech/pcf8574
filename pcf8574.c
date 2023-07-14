@@ -225,7 +225,7 @@ void pcf8574ReConfig(i2c_di_t * psI2C_DI) { return; }
 int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
-		iRV += halI2C_DeviceReport(psR, (void *) &sPCF8574[i].psI2C);
+		iRV += halI2C_DeviceReport(psR, (void *) sPCF8574[i].psI2C);
 		iRV += wprintfx(psR, "Rbuf=0x%02hX  Wbuf=0x%02hX  #IRQs=%lu  #Events=%lu\r\n\n",
 			sPCF8574[i].Rbuf, sPCF8574[i].Wbuf, xIDI_LostIRQs, xIDI_LostEvents);
 	}
