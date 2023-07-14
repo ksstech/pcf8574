@@ -5,11 +5,14 @@
 #pragma once
 
 #include "hal_i2cm.h"									// +x_struct_union +stdint
+#if (epIDI_IRQ_HANDLER == 1)
+	#include "hal_gpio.h"
+#endif
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 // ######################################## Enumerations ###########################################
 
@@ -48,12 +51,13 @@ typedef struct __attribute__((packed)) pcf8574_t {
 } pcf8574_t;
 DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
 
-// ####################################### Public variables ########################################
+// ######################################## Global variables #######################################
 
-extern u8_t pcf8574Num;
 extern pcf8574_t sPCF8574[];
+extern u32_t xIDI_LostIRQs, xIDI_LostEvents;
 
 // ####################################### Global functions ########################################
+
 
 void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir);
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan);
@@ -64,6 +68,7 @@ int	pcf8574Identify(i2c_di_t * psI2C_DI);
 int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
 int	pcf8574Config(i2c_di_t * psI2C_DI);
 void pcf8574ReConfig(i2c_di_t * psI2C_DI);
+void pcf8574InitIRQ(void);
 
 int pcf8574Report(report_t * psR);
 

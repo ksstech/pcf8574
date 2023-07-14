@@ -29,7 +29,11 @@
 
 // ######################################### Local variables #######################################
 
-u8_t pcf8574Num = 0;
+static u8_t pcf8574Num = 0;
+
+// ######################################## Global variables #######################################
+
+u32_t xIDI_LostIRQs, xIDI_LostEvents;
 pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
@@ -52,6 +56,62 @@ static int pcf8574WriteData(pcf8574_t * psPCF8574) {
 	int iRV = halI2CM_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
+}
+
+/**
+ *	@brief	Check each input, generate event for every input pulsed
+ *	@brief	Called in context of the I2C task
+ */
+void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
+	u8_t eDev = (int) Arg;
+	u32_t EventMask = 0;
+	IF_myASSERT(debugTRACK, eDev < halHAS_PCF8574);
+	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+	u8_t Mask = psPCF8574->Rbuf;
+	for (int eChan = 0; eChan < BITS_IN_BYTE; ++eChan) {
+		if ((Mask & 0x01) == 0)							// active LOW=0
+			EventMask |= (1UL << (eChan + evtFIRST_IDI));
+		Mask >>= 1;
+	}
+	if (EventMask) {
+		// Should NOT happen prior to I2C (or Events) tasks running, but just to be safe...
+		EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState) & taskEVENTS_MASK;
+		if (xEBrun == taskEVENTS_MASK) {
+			IF_P(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X -> 0x%04X\r\n", psPCF8574->Rbuf, EventMask);
+			xTaskNotifyFromISR(EventsHandle, EventMask, eSetBits, NULL);
+		} else {
+			++xIDI_LostEvents;
+		}
+	}
+}
+
+/**
+ * @brief	Trigger read of the PCF8574, schedule CB to handle the result
+ * @param	Index of the PCF8574 that should be read.
+ **/
+void IRAM_ATTR pcf8574IntHandler(void * Arg) {
+	// Should NOT happen prior to I2C (or Events) tasks running, but just to be safe...
+	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState) & taskI2C_MASK;
+	if (xEBrun == taskI2C_MASK) {
+		u8_t eDev = (int) Arg;
+		IF_myASSERT(debugPARAM, eDev < halHAS_PCF8574);
+		pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+		IF_SYSTIMER_START(debugTIMING, stPCF8574);
+		halI2CM_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
+		IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
+	} else {
+		++xIDI_LostIRQs;
+	}
+}
+
+void pcf8574InitIRQ(void) {
+	const gpio_config_t int_pin_cfg = {
+		.pin_bit_mask = 1ULL << pcf8574IRQ_PIN, .mode = GPIO_MODE_INPUT,
+		.pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
+		.intr_type = GPIO_INTR_NEGEDGE,
+	};
+	ESP_ERROR_CHECK(gpio_config(&int_pin_cfg));
+	halGPIO_IRQconfig(pcf8574IRQ_PIN, pcf8574IntHandler, (void *) epIDI_DEV_INDEX);
 }
 
 // ###################################### Global functions #########################################
