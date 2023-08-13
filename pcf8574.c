@@ -229,9 +229,9 @@ int	pcf8574Config(i2c_di_t * psI2C_DI) {
 	return erSUCCESS;
 }
 
-int	pcf8574Diagnostics(i2c_di_t * psI2C_DI) { return erSUCCESS; }
 void pcf8574Init(void) { pcf8574InitIRQ(); }
 
+int	pcf8574Diagnostics(i2c_di_t * psI2C_DI) { return erSUCCESS; }
 
 int pcf8574Report(report_t * psR) {
 	int iRV = 0;
