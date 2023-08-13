@@ -150,10 +150,8 @@ void pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState, bool Now) {
 	// Check pin is configured as output
 	IF_myASSERT(debugPARAM, ((psPCF8574->Mask >> Pnum) & 1) == 0);
 	#if (cmakePLTFRM == HW_KC868A6)
-	bool CurState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;					// Inverted
+	bool CurState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;	// Active LOW ie inverted
 	if (NewState != CurState) {
-//		P("Chan #%d [%d -> %d]", eChan, CurState, NewState);
-		// Active LOW design ie inverted
 		psPCF8574->Wbuf = NewState ? psPCF8574->Wbuf & ~(1 << Pnum) : psPCF8574->Wbuf | (1 << Pnum);
 		psPCF8574->fDirty = 1;							// bit changed, mark buffer as dirty
 		if (Now)
