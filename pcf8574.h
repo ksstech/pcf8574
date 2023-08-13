@@ -69,6 +69,7 @@ int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
 int	pcf8574Config(i2c_di_t * psI2C_DI);
 void pcf8574ReConfig(i2c_di_t * psI2C_DI);
 void pcf8574InitIRQ(void);
+void pcf8574Init(void);
 
 int pcf8574Report(report_t * psR);
 

@@ -30,6 +30,11 @@
 // ######################################### Local variables #######################################
 
 static u8_t pcf8574Num = 0;
+u8_t pcf8574Cfg[halHAS_PCF8574] = {
+#if (cmakePLTFRM == HW_KC868A6)
+	0b11111111, 0b11000000
+#endif
+};
 
 // ######################################## Global variables #######################################
 
@@ -212,6 +217,12 @@ int	pcf8574Identify(i2c_di_t * psI2C_DI) {
 	return erFAILURE;
 }
 
+void pcf8574ReConfig(i2c_di_t * psI2C_DI) {
+	pcf8574_t * psPCF8574 = &sPCF8574[psI2C_DI->DevIdx];
+	psPCF8574->Mask = pcf8574Cfg[psI2C_DI->DevIdx];
+	pcf8574WriteData(psPCF8574);
+}
+
 int	pcf8574Config(i2c_di_t * psI2C_DI) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 	pcf8574ReConfig(psI2C_DI);
@@ -219,8 +230,8 @@ int	pcf8574Config(i2c_di_t * psI2C_DI) {
 }
 
 int	pcf8574Diagnostics(i2c_di_t * psI2C_DI) { return erSUCCESS; }
+void pcf8574Init(void) { pcf8574InitIRQ(); }
 
-void pcf8574ReConfig(i2c_di_t * psI2C_DI) { return; }
 
 int pcf8574Report(report_t * psR) {
 	int iRV = 0;
