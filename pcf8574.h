@@ -54,20 +54,21 @@ DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
 // ######################################## Global variables #######################################
 
 extern pcf8574_t sPCF8574[];
-extern u32_t xIDI_LostIRQs, xIDI_LostEvents;
+extern u32_t xIDI_LostIRQs;
 
 // ####################################### Global functions ########################################
 
 
 void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir);
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan);
-void pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState, bool Now);
-void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan, bool Now);
+bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState);
+bool pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState);
+void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan);
 
 int	pcf8574Identify(i2c_di_t * psI2C_DI);
 int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
 int	pcf8574Config(i2c_di_t * psI2C_DI);
-void pcf8574ReConfig(i2c_di_t * psI2C_DI);
+int pcf8574ReConfig(i2c_di_t * psI2C_DI);
 void pcf8574InitIRQ(void);
 void pcf8574Init(void);
 

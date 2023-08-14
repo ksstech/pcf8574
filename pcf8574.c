@@ -32,13 +32,14 @@
 static u8_t pcf8574Num = 0;
 u8_t pcf8574Cfg[halHAS_PCF8574] = {
 #if (cmakePLTFRM == HW_KC868A6)
-	0b11111111, 0b11000000
+	0b11111111,						// INputs on 0->7 although only 0->5 used
+	0b11000000,						// OUTputs on 0->6, Unused (INputs) on 6->7
 #endif
 };
 
 // ######################################## Global variables #######################################
 
-u32_t xIDI_LostIRQs, xIDI_LostEvents;
+u32_t xIDI_LostIRQs;
 pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
@@ -48,7 +49,7 @@ pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
  */
 static int pcf8574ReadData(pcf8574_t * psPCF8574) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574);
-	int iRV = halI2CM_Queue(psPCF8574->psI2C, i2cR_FB, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
+	int iRV = halI2CM_Queue(psPCF8574->psI2C, i2cR_B, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
 }
@@ -63,30 +64,34 @@ static int pcf8574WriteData(pcf8574_t * psPCF8574) {
 	return iRV;
 }
 
+static int pcf8574WriteMask(pcf8574_t * psPCF8574) {
+	psPCF8574->Wbuf = psPCF8574->Mask;
+	return pcf8574WriteData(psPCF8574);
+}
+
 /**
  *	@brief	Check each input, generate event for every input pulsed
  *	@brief	Called in context of the I2C task
  */
 void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
+	/* Read		--------00110000
+	 * Invert	--------11001111
+	 * Mask		--------11001100	with 11111100
+	 * Shift R	--------00110011	lowest 2 bits are outputs
+	 * Shift L	-------001100110	evtFIRST_IDI = 1
+	 *
+	 * If bit0 NOT 1st INput bit value should be shifted RIGHT to remove low order OUTput bits
+	 */
 	u8_t eDev = (int) Arg;
-	u32_t EventMask = 0;
 	IF_myASSERT(debugTRACK, eDev < halHAS_PCF8574);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-	u8_t Mask = psPCF8574->Rbuf;
-	for (int eChan = 0; eChan < BITS_IN_BYTE; ++eChan) {
-		if ((Mask & 0x01) == 0)							// active LOW=0
-			EventMask |= (1UL << (eChan + evtFIRST_IDI));
-		Mask >>= 1;
-	}
+	u32_t EventMask = (u32_t) ~psPCF8574->Rbuf;	// Convert active LOW to HIGH
+	EventMask &= (u32_t) psPCF8574->Mask;		// Remove OUTput bits
+	EventMask >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
 	if (EventMask) {
-		// Should NOT happen prior to I2C (or Events) tasks running, but just to be safe...
-		EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState) & taskEVENTS_MASK;
-		if (xEBrun == taskEVENTS_MASK) {
-			IF_P(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X -> 0x%04X\r\n", psPCF8574->Rbuf, EventMask);
-			xTaskNotifyFromISR(EventsHandle, EventMask, eSetBits, NULL);
-		} else {
-			++xIDI_LostEvents;
-		}
+		EventMask <<= evtFIRST_IDI;
+		xTaskNotifyFromISR(EventsHandle, EventMask, eSetBits, NULL);
+		IF_P(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X -> 0x%04X\r\n", psPCF8574->Rbuf, EventMask);
 	}
 }
 
@@ -95,9 +100,13 @@ void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
  * @param	Index of the PCF8574 that should be read.
  **/
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
-	// Should NOT happen prior to I2C (or Events) tasks running, but just to be safe...
-	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState) & taskI2C_MASK;
-	if (xEBrun == taskI2C_MASK) {
+	/* Since the HW/HAL layer is initialised early during boot process, prior
+	 * to events/sensors/mqtt/related tasks, IRQs can occur before the system
+	 * is ready to handle them.
+	 */
+	#define pcf8574REQ_TASKS	(taskI2C_MASK | taskEVENTS_MASK)
+	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState);
+	if ((xEBrun & pcf8574REQ_TASKS) == pcf8574REQ_TASKS) {
 		u8_t eDev = (int) Arg;
 		IF_myASSERT(debugPARAM, eDev < halHAS_PCF8574);
 		pcf8574_t * psPCF8574 = &sPCF8574[eDev];
@@ -128,8 +137,10 @@ void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir) {
 	IF_myASSERT(debugPARAM, eChan < pcf8574NUM_PINS);
 	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
 	u8_t Mask = 1 << (eChan % 8);
+	// Set correct bit in mask to indicate direction
 	psPCF8574->Mask = Dir ? (psPCF8574->Mask | Mask) : (psPCF8574->Mask & ~Mask);
-	pcf8574WriteData(psPCF8574);
+	if (Dir)	// If being set as INput, must also write mask to device
+		pcf8574WriteMask(psPCF8574);
 }
 
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
@@ -140,43 +151,41 @@ bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
 		pcf8574ReadData(psPCF8574);						// Input pin, read live status
 		return (psPCF8574->Rbuf >> Pnum) & 1;
 	}
-	return (psPCF8574->Wbuf >> Pnum) & 1;
+	return (psPCF8574->Wbuf >> Pnum) & 1;				// Initially not correct if last write was mask.
 }
 
-void pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState, bool Now) {
+bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState) {
 	IF_myASSERT(debugPARAM, (eChan < pcf8574NUM_PINS))
 	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
 	u8_t Pnum = eChan % 8;
 	// Check pin is configured as output
 	IF_myASSERT(debugPARAM, ((psPCF8574->Mask >> Pnum) & 1) == 0);
-	#if (cmakePLTFRM == HW_KC868A6)
 	bool CurState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;	// Active LOW ie inverted
-	if (NewState != CurState) {
+	bool bRV = NewState != CurState ? 1 : 0;
+	if (bRV) {
 		psPCF8574->Wbuf = NewState ? psPCF8574->Wbuf & ~(1 << Pnum) : psPCF8574->Wbuf | (1 << Pnum);
 		psPCF8574->fDirty = 1;							// bit changed, mark buffer as dirty
-		if (Now)
-			pcf8574WriteData(psPCF8574);
 	}
-	#else
-	bool CurState = (psPCF8574->Wbuf >> Pnum) & 1 ? 1 : 0;
-	if (NewState != CurState) {
-		P("Chan #%d [%d -> %d]", eChan, CurState, NewState);
-		psPCF8574->Wbuf = NewState ? psPCF8574->Wbuf | (1 << Pnum) : psPCF8574->Wbuf & ~(1 << Pnum);
-		psPCF8574->fDirty = 1;							// bit changed, mark buffer as dirty
-		if (Now)
-			pcf8574WriteData(psPCF8574);
-	}
-	#endif
+	return bRV;
 }
 
-void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan, bool Now) {
+bool pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState) {
+	int bRV = pcf8574DIG_OUT_SetStateLazy(eChan, NewState);
+	if (bRV) {
+		pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
+		pcf8574WriteData(psPCF8574);
+	}
+	return bRV;
+}
+
+void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
 	IF_myASSERT(debugPARAM, (eChan < pcf8574NUM_PINS))
 	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
 	u8_t Pnum = eChan % 8;
 	// Check pin is configured as output
 	IF_myASSERT(debugPARAM, ((psPCF8574->Mask >> Pnum) & 1) == 0);
 	bool NewState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;
-	pcf8574DIG_OUT_SetState(eChan, NewState, Now);
+	pcf8574DIG_OUT_SetState(eChan, NewState);
 }
 
 // ################################## Diagnostics functions ########################################
@@ -215,16 +224,15 @@ int	pcf8574Identify(i2c_di_t * psI2C_DI) {
 	return erFAILURE;
 }
 
-void pcf8574ReConfig(i2c_di_t * psI2C_DI) {
+int pcf8574ReConfig(i2c_di_t * psI2C_DI) {
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C_DI->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C_DI->DevIdx];
-	pcf8574WriteData(psPCF8574);
+	return pcf8574WriteMask(psPCF8574);
 }
 
 int	pcf8574Config(i2c_di_t * psI2C_DI) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
-	pcf8574ReConfig(psI2C_DI);
-	return erSUCCESS;
+	return pcf8574ReConfig(psI2C_DI);
 }
 
 void pcf8574Init(void) { pcf8574InitIRQ(); }
@@ -235,8 +243,8 @@ int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
 		iRV += halI2C_DeviceReport(psR, (void *) sPCF8574[i].psI2C);
-		iRV += wprintfx(psR, "Rbuf=0x%02hX  Wbuf=0x%02hX  Lost IRQs=%lu,  Events=%lu\r\n\n",
-			sPCF8574[i].Rbuf, sPCF8574[i].Wbuf, xIDI_LostIRQs, xIDI_LostEvents);
+		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  Lost IRQs=%lu\r\n\n",
+			sPCF8574[i].Mask, sPCF8574[i].Rbuf, sPCF8574[i].Wbuf, xIDI_LostIRQs);
 	}
 	return iRV;
 }
