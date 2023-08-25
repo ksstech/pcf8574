@@ -39,7 +39,7 @@ u8_t pcf8574Cfg[halHAS_PCF8574] = {
 
 // ######################################## Global variables #######################################
 
-u32_t xIDI_LostIRQs;
+u32_t xIDI_IRQsOK, xIDI_LostIRQs, xIDI_IRQsHdld, xIDI_IRQsIgnr;
 pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
@@ -85,14 +85,20 @@ void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
 	u8_t eDev = (int) Arg;
 	IF_myASSERT(debugTRACK, eDev < halHAS_PCF8574);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-	u32_t EventMask = (u32_t) ~psPCF8574->Rbuf;	// Convert active LOW to HIGH
-	EventMask &= (u32_t) psPCF8574->Mask;		// Remove OUTput bits
-	EventMask >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
-	if (EventMask) {
-		EventMask <<= evtFIRST_IDI;
+	u8_t Mask = ~psPCF8574->Rbuf;						// Convert active LOW to HIGH
+	Mask &= psPCF8574->Mask;							// Remove OUTput bits
+	Mask >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
+	u32_t EventMask;
+	if (Mask) {
+		EventMask = (u32_t) Mask << evtFIRST_IDI;
 		xTaskNotifyFromISR(EventsHandle, EventMask, eSetBits, NULL);
-		IF_P(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X -> 0x%04X\r\n", psPCF8574->Rbuf, EventMask);
+		++xIDI_IRQsHdld;
+	} else {
+		EventMask = 0;
+		++xIDI_IRQsIgnr;
 	}
+	IF_PT(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X->0x%08X (%d+%d=%d)\r\n",
+		psPCF8574->Rbuf, EventMask, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 }
 
 /**
@@ -113,6 +119,7 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		IF_SYSTIMER_START(debugTIMING, stPCF8574);
 		halI2CM_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
 		IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
+		++xIDI_IRQsOK;
 	} else {
 		++xIDI_LostIRQs;
 	}
