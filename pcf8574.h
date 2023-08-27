@@ -4,11 +4,10 @@
 
 #pragma once
 
-#include "hal_i2cm.h"									// +x_struct_union +stdint
+#include "hal_i2c_common.h"
 #if (epIDI_IRQ_HANDLER == 1)
 	#include "hal_gpio.h"
 #endif
-
 
 #ifdef __cplusplus
 extern "C" {
