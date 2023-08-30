@@ -5,7 +5,7 @@
 #include "hal_variables.h"
 
 #if (halHAS_PCF8574 > 0)
-#include "pcf8574.h"
+#include "hal_i2c_common.h"
 #include "x_errors_events.h"
 #include "printfx.h"
 #include "syslog.h"
@@ -73,7 +73,7 @@ static int pcf8574WriteMask(pcf8574_t * psPCF8574) {
  *	@brief	Check each input, generate event for every input pulsed
  *	@brief	Called in context of the I2C task
  */
-void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
+void pcf8574ReadHandler(void * Arg) {
 	/* Read		--------00110000
 	 * Invert	--------11001111
 	 * Mask		--------11001100	with 11111100
@@ -101,6 +101,14 @@ void IRAM_ATTR pcf8574ReadHandler(void * Arg) {
 		psPCF8574->Rbuf, EventMask, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 }
 
+void pcf8574ReadTrigger(void * Arg) {
+	u8_t eDev = (int) Arg;
+	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+	IF_SYSTIMER_START(debugTIMING, stPCF8574);
+	halI2CM_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
+	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
+}
+
 /**
  * @brief	Trigger read of the PCF8574, schedule CB to handle the result
  * @param	Index of the PCF8574 that should be read.
@@ -114,11 +122,7 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState);
 	if ((xEBrun & pcf8574REQ_TASKS) == pcf8574REQ_TASKS) {
 		u8_t eDev = (int) Arg;
-		IF_myASSERT(debugPARAM, eDev < halHAS_PCF8574);
-		pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-		IF_SYSTIMER_START(debugTIMING, stPCF8574);
-		halI2CM_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
-		IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
+		xTaskNotifyFromISR(EventsHandle, 1UL << eDev, eSetBits, NULL);
 		++xIDI_IRQsOK;
 	} else {
 		++xIDI_LostIRQs;
