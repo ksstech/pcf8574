@@ -135,6 +135,58 @@ void pcf8574InitIRQ(void) {
 	halGPIO_IRQconfig(pcf8574IRQ_PIN, pcf8574IntHandler, (void *) epIDI_DEV_INDEX);
 }
 
+// ################################## Diagnostics functions ########################################
+
+int	pcf8574Identify(i2c_di_t * psI2C) {
+	psI2C->TRXmS = 10;									// default device timeout
+	psI2C->CLKuS = 400;									// Max 13000 (13mS)
+	psI2C->Test = 1;									// test mode
+	psI2C->Type = i2cDEV_PCF8574;
+	psI2C->Speed = i2cSPEED_100;						// does not support 400KHz
+	psI2C->DevIdx = pcf8574Num;
+
+	pcf8574_t * psPCF8574 = &sPCF8574[pcf8574Num];
+	psPCF8574->psI2C = psI2C;
+	int iRV = 0;
+	do {
+		// Step 1 - read data register
+		psPCF8574->Rbuf = 0;
+		pcf8574ReadData(psPCF8574);
+		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
+		if (psPCF8574->Rbuf == 0xFF) {					// passed basic test
+			++pcf8574Num;								// mark as identified
+			psI2C->Test = 0;
+			return erSUCCESS;
+		} else {										// try to recover device
+			psPCF8574->Wbuf = 0xFF;						// set all 1's = Inputs
+			pcf8574WriteData(psPCF8574);
+			++iRV;
+		}
+	} while(iRV < 5);
+	SL_ERR(" Failed after %d retries", iRV);
+	IF_PX(debugTRACK && ioB1GET(ioI2Cinit), "I2C device at 0x%02X not PCF8574", psI2C->Addr);
+	psI2C->Test = 0;
+	psPCF8574->psI2C = NULL;
+	return erFAILURE;
+}
+
+int	pcf8574Config(i2c_di_t * psI2C) {
+	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
+	int iRV = pcf8574ReConfig(psI2C);
+	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
+	return iRV;
+}
+
+int pcf8574ReConfig(i2c_di_t * psI2C) {
+	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
+	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
+	return pcf8574WriteMask(psPCF8574);
+}
+
+// ################################## Diagnostics functions ########################################
+
+int	pcf8574Diagnostics(i2c_di_t * psI2C) { return erSUCCESS; }
+
 // ###################################### Global functions #########################################
 
 /**
@@ -194,57 +246,6 @@ void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
 	bool NewState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;
 	pcf8574DIG_OUT_SetState(eChan, NewState);
 }
-
-// ################################## Diagnostics functions ########################################
-
-int	pcf8574Identify(i2c_di_t * psI2C_DI) {
-	psI2C_DI->TRXmS	= 10;								// default device timeout
-	psI2C_DI->CLKuS = 400;								// Max 13000 (13mS)
-	psI2C_DI->Test = 1;									// test mode
-	psI2C_DI->Type = i2cDEV_PCF8574;
-	psI2C_DI->Speed = i2cSPEED_100;						// does not support 400KHz
-	psI2C_DI->DevIdx = pcf8574Num;
-
-	pcf8574_t * psPCF8574 = &sPCF8574[pcf8574Num];
-	psPCF8574->psI2C = psI2C_DI;
-
-	// Step 1 - read & write data register
-	psPCF8574->Rbuf = 0;
-	pcf8574ReadData(psPCF8574);
-
-	// Step 2 - Check initial default values
-	if (psPCF8574->Rbuf == 0xFF) {						// passed phase 1, now step 4
-		psPCF8574->Wbuf = 0;
-		pcf8574WriteData(psPCF8574);
-		pcf8574ReadData(psPCF8574);
-		if (psPCF8574->Rbuf == psPCF8574->Wbuf) {
-			++pcf8574Num;
-			psPCF8574->Wbuf = 0xFF;
-			pcf8574WriteData(psPCF8574);
-			psI2C_DI->Test = 0;
-			return erSUCCESS;
-		}
-	}
-	IF_PX(debugTRACK && ioB1GET(ioI2Cinit), "I2C device at 0x%02X not PCF8574", psI2C_DI->Addr);
-	psI2C_DI->Test = 0;
-	psPCF8574->psI2C = NULL;
-	return erFAILURE;
-}
-
-int pcf8574ReConfig(i2c_di_t * psI2C_DI) {
-	pcf8574_t * psPCF8574 = &sPCF8574[psI2C_DI->DevIdx];
-	psPCF8574->Mask = pcf8574Cfg[psI2C_DI->DevIdx];
-	return pcf8574WriteMask(psPCF8574);
-}
-
-int	pcf8574Config(i2c_di_t * psI2C_DI) {
-	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
-	return pcf8574ReConfig(psI2C_DI);
-}
-
-void pcf8574Init(void) { pcf8574InitIRQ(); }
-
-int	pcf8574Diagnostics(i2c_di_t * psI2C_DI) { return erSUCCESS; }
 
 int pcf8574Report(report_t * psR) {
 	int iRV = 0;

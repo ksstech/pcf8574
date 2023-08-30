@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include "hal_i2c_common.h"
-#if (epIDI_IRQ_HANDLER == 1)
+#if (epIDI_IRQ_HANDLER > 0)
 	#include "hal_gpio.h"
 #endif
 
@@ -57,6 +56,7 @@ extern u32_t xIDI_LostIRQs;
 
 // ####################################### Global functions ########################################
 
+void pcf8574ReadTrigger(void * Arg);
 
 void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir);
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan);
@@ -68,8 +68,7 @@ int	pcf8574Identify(i2c_di_t * psI2C_DI);
 int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
 int	pcf8574Config(i2c_di_t * psI2C_DI);
 int pcf8574ReConfig(i2c_di_t * psI2C_DI);
-void pcf8574InitIRQ(void);
-void pcf8574Init(void);
+void pcf8574InitIRQ(int PinNum);
 
 int pcf8574Report(report_t * psR);
 
