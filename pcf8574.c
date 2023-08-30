@@ -125,14 +125,14 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	}
 }
 
-void pcf8574InitIRQ(void) {
+void pcf8574InitIRQ(int PinNum) {
 	const gpio_config_t int_pin_cfg = {
-		.pin_bit_mask = 1ULL << pcf8574IRQ_PIN, .mode = GPIO_MODE_INPUT,
+		.pin_bit_mask = 1ULL << PinNum, .mode = GPIO_MODE_INPUT,
 		.pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
 		.intr_type = GPIO_INTR_NEGEDGE,
 	};
 	ESP_ERROR_CHECK(gpio_config(&int_pin_cfg));
-	halGPIO_IRQconfig(pcf8574IRQ_PIN, pcf8574IntHandler, (void *) epIDI_DEV_INDEX);
+	halGPIO_IRQconfig(PinNum, pcf8574IntHandler, (void *) epIDI_DEV_INDEX);
 }
 
 // ################################## Diagnostics functions ########################################
