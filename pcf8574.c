@@ -39,7 +39,7 @@ u8_t pcf8574Cfg[halHAS_PCF8574] = {
 
 // ######################################## Global variables #######################################
 
-u32_t xIDI_IRQsOK, xIDI_LostIRQs, xIDI_IRQsHdld, xIDI_IRQsIgnr;
+u32_t xIDI_IRQsOK, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr;
 pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
@@ -97,8 +97,8 @@ void pcf8574ReadHandler(void * Arg) {
 		EventMask = 0;
 		++xIDI_IRQsIgnr;
 	}
-	IF_PT(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X->0x%08X (%d+%d=%d)\r\n",
-		psPCF8574->Rbuf, EventMask, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
+	IF_PT(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X->0x%08X (L=%d H=%d I=%d OK=%d)\r\n",
+		psPCF8574->Rbuf, EventMask, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 }
 
 void pcf8574ReadTrigger(void * Arg) {
@@ -125,7 +125,7 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		xTaskNotifyFromISR(EventsHandle, 1UL << eDev, eSetBits, NULL);
 		++xIDI_IRQsOK;
 	} else {
-		++xIDI_LostIRQs;
+		++xIDI_IRQsLost;
 	}
 }
 
@@ -255,8 +255,9 @@ int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
 		iRV += halI2C_DeviceReport(psR, (void *) sPCF8574[i].psI2C);
-		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  Lost IRQs=%lu\r\n\n",
-			sPCF8574[i].Mask, sPCF8574[i].Rbuf, sPCF8574[i].Wbuf, xIDI_LostIRQs);
+		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  IRQs  L=%lu  H=%lu  I=%lu  OK=%lu\r\n\n",
+			sPCF8574[i].Mask, sPCF8574[i].Rbuf, sPCF8574[i].Wbuf,
+			xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 	}
 	return iRV;
 }
