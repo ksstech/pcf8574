@@ -49,7 +49,7 @@ pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
  */
 static int pcf8574ReadData(pcf8574_t * psPCF8574) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574);
-	int iRV = halI2CM_Queue(psPCF8574->psI2C, i2cR_B, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
+	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cR_B, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
 }
@@ -59,7 +59,7 @@ static int pcf8574ReadData(pcf8574_t * psPCF8574) {
  */
 static int pcf8574WriteData(pcf8574_t * psPCF8574) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574);
-	int iRV = halI2CM_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
+	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
 }
@@ -105,7 +105,7 @@ void pcf8574ReadTrigger(void * Arg) {
 	u8_t eDev = (int) Arg;
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
 	IF_SYSTIMER_START(debugTIMING, stPCF8574);
-	halI2CM_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
+	halI2C_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 }
 
