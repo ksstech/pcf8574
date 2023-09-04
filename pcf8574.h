@@ -45,7 +45,8 @@ typedef struct __attribute__((packed)) pcf8574_t {
 	u8_t Mask;						//	all In=0xFF, all Out=0x00
 	u8_t Rbuf;
 	u8_t Wbuf;
-	bool fDirty;
+	u8_t IRQpin:6;
+	u8_t fDirty:1;
 } pcf8574_t;
 DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
 
@@ -62,6 +63,7 @@ bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState);
 bool pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState);
 void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan);
 
+int pcf8574Check(pcf8574_t * psPCF8574);
 int	pcf8574Identify(i2c_di_t * psI2C_DI);
 int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
 int	pcf8574Config(i2c_di_t * psI2C_DI);

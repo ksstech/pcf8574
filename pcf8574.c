@@ -31,10 +31,12 @@
 
 static u8_t pcf8574Num = 0;
 u8_t pcf8574Cfg[halHAS_PCF8574] = {
-#if (cmakePLTFRM == HW_KC868A6)
+	#if (cmakePLTFRM == HW_KC868A6)
 	0b11111111,						// INputs on 0->7 although only 0->5 used
 	0b11000000,						// OUTputs on 0->6, Unused (INputs) on 6->7
-#endif
+	#else
+	#error "Please add default values for new platform"
+	#endif
 };
 
 // ######################################## Global variables #######################################
@@ -141,6 +143,32 @@ void pcf8574InitIRQ(int PinNum) {
 
 // ################################## Diagnostics functions ########################################
 
+/* KC868A6 specific:
+ * PCF8574 at 0x22 is used for input and at 0x24 for outputs.
+ * On a device used for inputs, all or some pins, changing inputs at identification stage is likely.
+ * These changing inputs will affect the values read hence the test values/mask must be carefully
+ * determined. ON the KC868A6 only GPIO's 0 to 5 are used as inputs, so Gpio's 6&7 will be high.
+ */
+int pcf8574Check(pcf8574_t * psPCF8574) {
+	int iRV = 0;
+	do {
+		// Step 1 - read data register
+		psPCF8574->Rbuf = 0;
+		pcf8574ReadData(psPCF8574);
+		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
+		#if (cmakePLTFRM == HW_KC868A6)
+		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0) return erSUCCESS;
+		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) return erSUCCESS;
+		#else
+			#error "Customer test code required for this platform"
+		#endif
+		psPCF8574->Wbuf = 0xFF;						// set all 1's = Inputs
+		pcf8574WriteData(psPCF8574);
+		++iRV;
+	} while(iRV < 5);
+	return erFAILURE;
+}
+
 int	pcf8574Identify(i2c_di_t * psI2C) {
 	psI2C->TRXmS = 10;									// default device timeout
 	psI2C->CLKuS = 400;									// Max 13000 (13mS)
@@ -151,33 +179,30 @@ int	pcf8574Identify(i2c_di_t * psI2C) {
 
 	pcf8574_t * psPCF8574 = &sPCF8574[pcf8574Num];
 	psPCF8574->psI2C = psI2C;
-	int iRV = 0;
-	do {
-		// Step 1 - read data register
-		psPCF8574->Rbuf = 0;
-		pcf8574ReadData(psPCF8574);
-		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
-		if (psPCF8574->Rbuf == 0xFF) {					// passed basic test
-			++pcf8574Num;								// mark as identified
-			psI2C->Test = 0;
-			return erSUCCESS;
-		} else {										// try to recover device
-			psPCF8574->Wbuf = 0xFF;						// set all 1's = Inputs
-			pcf8574WriteData(psPCF8574);
-			++iRV;
-		}
-	} while(iRV < 5);
+	int iRV = pcf8574Check(psPCF8574);
+	if (iRV == erSUCCESS) {
+		++pcf8574Num;									// mark as identified
+		psI2C->Test = 0;
+		return erSUCCESS;
+	}
 	SL_ERR(" Failed after %d retries", iRV);
 	IF_PX(debugTRACK && ioB1GET(ioI2Cinit), "I2C device at 0x%02X not PCF8574", psI2C->Addr);
-	psI2C->Test = 0;
-	psPCF8574->psI2C = NULL;
+//	psI2C->Test = 0;
+//	psPCF8574->psI2C = NULL;
 	return erFAILURE;
 }
 
 int	pcf8574Config(i2c_di_t * psI2C) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 	int iRV = pcf8574ReConfig(psI2C);
-	pcf8574InitIRQ(pcf8574IRQ_PIN);
+	#if (cmakePLTFRM == HW_KC868A6)
+	if (psI2C->Addr == 0x22)
+		pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574IRQ_PIN);
+	else
+		sPCF8574[psI2C->DevIdx].IRQpin = -1;
+	#else
+	#warning " Add IRQ support if required."
+	#endif
 	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
 	return iRV;
 }
@@ -203,8 +228,7 @@ void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir) {
 	u8_t Mask = 1 << (eChan % 8);
 	// Set correct bit in mask to indicate direction
 	psPCF8574->Mask = Dir ? (psPCF8574->Mask | Mask) : (psPCF8574->Mask & ~Mask);
-	if (Dir)	// If being set as INput, must also write mask to device
-		pcf8574WriteMask(psPCF8574);
+	if (Dir) pcf8574WriteMask(psPCF8574);	// If set as INput, write mask to device
 }
 
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
@@ -255,10 +279,13 @@ void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
 int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
-		iRV += halI2C_DeviceReport(psR, (void *) sPCF8574[i].psI2C);
-		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  IRQs  L=%lu  H=%lu  I=%lu  OK=%lu\r\n\n",
-			sPCF8574[i].Mask, sPCF8574[i].Rbuf, sPCF8574[i].Wbuf,
-			xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
+		pcf8574_t * psPCF8574 = &sPCF8574[i];
+		if (psPCF8574->psI2C->Test) pcf8574Check(psPCF8574);
+		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
+		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
+		if (psPCF8574->IRQpin == pcf8574IRQ_PIN)
+			iRV += wprintfx(psR, "  IRQs  L=%lu  H=%lu  I=%lu  OK=%lu", xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
+		iRV += wprintfx(psR, strCRLF);
 	}
 	return iRV;
 }
