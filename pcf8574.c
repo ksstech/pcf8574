@@ -177,6 +177,7 @@ int	pcf8574Identify(i2c_di_t * psI2C) {
 int	pcf8574Config(i2c_di_t * psI2C) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 	int iRV = pcf8574ReConfig(psI2C);
+	pcf8574InitIRQ(pcf8574IRQ_PIN);
 	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
 	return iRV;
 }
