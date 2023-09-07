@@ -159,8 +159,9 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 		#if (cmakePLTFRM == HW_KC868A6)
 		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0) return erSUCCESS;
 		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) return erSUCCESS;
+		RP("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
 		#else
-			#error "Customer test code required for this platform"
+			#error "Custom test code required for this platform"
 		#endif
 		psPCF8574->Wbuf = 0xFF;						// set all 1's = Inputs
 		pcf8574WriteData(psPCF8574);
