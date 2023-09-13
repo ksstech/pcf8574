@@ -138,7 +138,7 @@ void pcf8574InitIRQ(int PinNum) {
 		.intr_type = GPIO_INTR_NEGEDGE,
 	};
 	ESP_ERROR_CHECK(gpio_config(&int_pin_cfg));
-	halGPIO_IRQconfig(PinNum, pcf8574IntHandler, (void *) epIDI_DEV_INDEX);
+	halGPIO_IRQconfig(PinNum, pcf8574IntHandler, (void *) pcf8574DEV_0_IDX);
 }
 
 // ################################## Diagnostics functions ########################################
