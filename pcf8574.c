@@ -197,10 +197,8 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 	int iRV = pcf8574ReConfig(psI2C);
 	#if (cmakePLTFRM == HW_KC868A6)
-	if (psI2C->Addr == 0x22)
-		pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574IRQ_PIN);
-	else
-		sPCF8574[psI2C->DevIdx].IRQpin = -1;
+	if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
+	else sPCF8574[psI2C->DevIdx].IRQpin = -1;
 	#else
 	#warning " Add IRQ support if required."
 	#endif
@@ -284,7 +282,7 @@ int pcf8574Report(report_t * psR) {
 		if (psPCF8574->psI2C->Test) pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
 		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
-		if (psPCF8574->IRQpin == pcf8574IRQ_PIN)
+		if (psPCF8574->IRQpin == pcf8574DEV_0_IRQ)
 			iRV += wprintfx(psR, "  IRQs  L=%lu  H=%lu  I=%lu  OK=%lu", xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 		iRV += wprintfx(psR, strCRLF);
 	}

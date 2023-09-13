@@ -4,10 +4,6 @@
 
 #pragma once
 
-#if (epIDI_IRQ_HANDLER > 0)
-	#include "hal_gpio.h"
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
