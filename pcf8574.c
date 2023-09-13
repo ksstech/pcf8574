@@ -202,14 +202,15 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	#else
 	#warning " Add IRQ support if required."
 	#endif
-	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
 	return iRV;
 }
 
 int pcf8574ReConfig(i2c_di_t * psI2C) {
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
-	return pcf8574WriteMask(psPCF8574);
+	int iRV = pcf8574WriteMask(psPCF8574);
+	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
+	return iRV;
 }
 
 // ################################## Diagnostics functions ########################################
