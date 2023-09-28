@@ -152,66 +152,63 @@ void pcf8574InitIRQ(int PinNum) {
  * determined. ON the KC868A6 only GPIO's 0 to 5 are used as inputs, so Gpio's 6&7 will be high.
  */
 int pcf8574Check(pcf8574_t * psPCF8574) {
-	int iRV = 0;
+	int Count = 0;
 	do {
 		// Step 1 - read data register
 		psPCF8574->Rbuf = 0;
-		pcf8574ReadData(psPCF8574);
+		int iRV = pcf8574ReadData(psPCF8574);
+		if (iRV < erSUCCESS) return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
 		#if (cmakePLTFRM == HW_KC868A6)
 		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0) return erSUCCESS;
 		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) return erSUCCESS;
-		RP("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
+		SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
 		#else
 			#error "Custom test code required for this platform"
 		#endif
-		psPCF8574->Wbuf = 0xFF;						// set all 1's = Inputs
+		psPCF8574->Wbuf = 0xFF;							// set all 1's = Inputs
 		pcf8574WriteData(psPCF8574);
-		++iRV;
-	} while(iRV < 5);
-	return erFAILURE;
+	} while(++Count < 5);
+	return erINV_WHOAMI;
 }
 
 int	pcf8574Identify(i2c_di_t * psI2C) {
-	psI2C->TRXmS = 10;									// default device timeout
-	psI2C->CLKuS = 400;									// Max 13000 (13mS)
-	psI2C->Test = 1;									// test mode
-	psI2C->Type = i2cDEV_PCF8574;
-	psI2C->Speed = i2cSPEED_100;						// does not support 400KHz
-	psI2C->DevIdx = pcf8574Num;
-
 	pcf8574_t * psPCF8574 = &sPCF8574[pcf8574Num];
 	psPCF8574->psI2C = psI2C;
+	psI2C->Type = i2cDEV_PCF8574;
+	psI2C->Speed = i2cSPEED_100;						// does not support 400KHz
+	psI2C->TObus = 100;
+	psI2C->Test = 1;
 	int iRV = pcf8574Check(psPCF8574);
-	if (iRV == erSUCCESS) {
-		++pcf8574Num;									// mark as identified
-		psI2C->Test = 0;
-		return erSUCCESS;
-	}
-	SL_ERR(" Failed after %d retries", iRV);
-	IF_PX(debugTRACK && ioB1GET(ioI2Cinit), "I2C device at 0x%02X not PCF8574", psI2C->Addr);
-//	psI2C->Test = 0;
-//	psPCF8574->psI2C = NULL;
-	return erFAILURE;
-}
-
-int	pcf8574Config(i2c_di_t * psI2C) {
-	IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
-	int iRV = pcf8574ReConfig(psI2C);
-	#if (cmakePLTFRM == HW_KC868A6)
-	if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
-	else sPCF8574[psI2C->DevIdx].IRQpin = -1;
-	#else
-	#warning " Add IRQ support if required."
-	#endif
+	if (iRV < erSUCCESS) goto exit;
+	psI2C->DevIdx = pcf8574Num++;					// mark as identified
+	psI2C->IDok = 1;
+	psI2C->Test = 0;
+exit:
 	return iRV;
 }
 
-int pcf8574ReConfig(i2c_di_t * psI2C) {
+int	pcf8574Config(i2c_di_t * psI2C) {
+	if (!psI2C->IDok) return erINV_STATE;
+
+	psI2C->CFGok = 0;
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
 	int iRV = pcf8574WriteMask(psPCF8574);
-	if (iRV > erFAILURE) xEventGroupSetBits(EventDevices, devMASK_PCF8574);
+	if (iRV < erSUCCESS) goto exit;
+
+	psI2C->CFGok = 1;
+	// once off init....
+	if (!psI2C->CFGerr) {
+		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
+		#if (cmakePLTFRM == HW_KC868A6)
+		if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
+		else sPCF8574[psI2C->DevIdx].IRQpin = -1;
+		#else
+		#warning " Add IRQ support if required."
+		#endif
+	}
+exit:
 	return iRV;
 }
 
