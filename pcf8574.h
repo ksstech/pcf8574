@@ -36,8 +36,9 @@ typedef enum {
 
 // ######################################### Structures ############################################
 
+struct i2c_di_t;
 typedef struct __attribute__((packed)) pcf8574_t {
-	i2c_di_t * psI2C;
+	struct i2c_di_t * psI2C;
 	u8_t Mask;						//	all In=0xFF, all Out=0x00
 	u8_t Rbuf;
 	u8_t Wbuf;
@@ -53,20 +54,19 @@ DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
 
 void pcf8574ReadTrigger(void * Arg);
 
-void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir);
-bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan);
-bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState);
-bool pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState);
-void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan);
+void pcf8574DIG_IO_SetDirection(pcf8574_io_t eCh, bool Dir);
+bool pcf8574DIG_IO_GetState(pcf8574_io_t eCh);
+bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eCh, bool NewState);
+bool pcf8574DIG_OUT_SetState(pcf8574_io_t eCh, bool NewState);
+void pcf8574DIG_OUT_Toggle(pcf8574_io_t eCh);
 
 int pcf8574Check(pcf8574_t * psPCF8574);
-int	pcf8574Identify(i2c_di_t * psI2C_DI);
-int	pcf8574Diagnostics(i2c_di_t * psI2C_DI);
-int	pcf8574Config(i2c_di_t * psI2C_DI);
-int pcf8574ReConfig(i2c_di_t * psI2C_DI);
+int	pcf8574Identify(struct i2c_di_t * psI2C);
+int	pcf8574Diagnostics(struct i2c_di_t * psI2C);
+int	pcf8574Config(struct i2c_di_t * psI2C);
 void pcf8574InitIRQ(int PinNum);
-
-int pcf8574Report(report_t * psR);
+struct report_t;
+int pcf8574Report(struct report_t * psR);
 
 #ifdef __cplusplus
 }

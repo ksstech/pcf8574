@@ -2,10 +2,12 @@
  * pcf8574.c Copyright (c) 2023 Andre M. Maree / KSS Technologies (Pty) Ltd.
  */
 
-#include "hal_variables.h"
+#include "hal_config.h"
 
 #if (halHAS_PCF8574 > 0)
+#include "pcf8574.h"
 #include "hal_i2c_common.h"
+#include "hal_options.h"
 #include "x_errors_events.h"
 #include "printfx.h"
 #include "syslog.h"
