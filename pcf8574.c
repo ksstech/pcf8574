@@ -33,7 +33,7 @@
 
 static u8_t pcf8574Num = 0;
 u8_t pcf8574Cfg[halHAS_PCF8574] = {
-	#if (cmakePLTFRM == HW_KC868A6)
+	#if (buildPLTFRM == HW_KC868A6)
 	0b11111111,						// INputs on 0->7 although only 0->5 used
 	0b11000000,						// OUTputs on 0->6, Unused (INputs) on 6->7
 	#else
@@ -159,7 +159,7 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 		int iRV = pcf8574ReadData(psPCF8574);
 		if (iRV < erSUCCESS) return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
-		#if (cmakePLTFRM == HW_KC868A6)
+		#if (buildPLTFRM == HW_KC868A6)
 		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0) return erSUCCESS;
 		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) return erSUCCESS;
 		SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
@@ -201,7 +201,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	// once off init....
 	if (!psI2C->CFGerr) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
-		#if (cmakePLTFRM == HW_KC868A6)
+		#if (buildPLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
 		else sPCF8574[psI2C->DevIdx].IRQpin = -1;
 		#else
