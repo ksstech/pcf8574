@@ -101,7 +101,7 @@ void pcf8574ReadHandler(void * Arg) {
 		EventMask = 0;
 		++xIDI_IRQsIgnr;
 	}
-	IF_PT(debugTRACK && (ioB2GET(dbgGPI) & 2), "0x%02X->0x%08X (L=%d H=%d I=%d OK=%d)\r\n",
+	IF_PT(debugTRACK && (ioB2GET(dbgGDIO) & 2), "0x%02X->0x%08X (L=%d H=%d I=%d OK=%d)\r\n",
 		psPCF8574->Rbuf, EventMask, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 }
 
