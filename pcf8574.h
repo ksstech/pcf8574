@@ -1,6 +1,4 @@
-/*
- * pcf8574.h - Copyright (c) 2023 Andre M. Maree/KSS Technologies (Pty) Ltd.
- */
+// pcf8574.h
 
 #pragma once
 
@@ -11,7 +9,7 @@ extern "C" {
 // ######################################## Enumerations ###########################################
 
 typedef enum {
-	#if (halHAS_PCF8574 > 0)
+	#if (HAL_PCF8574 > 0)
 	pcf8574IO0,
 	pcf8574IO1,
 	pcf8574IO2,
@@ -21,7 +19,7 @@ typedef enum {
 	pcf8574IO6,
 	pcf8574IO7,
 	#endif
-	#if (halHAS_PCF8574 > 1)
+	#if (HAL_PCF8574 > 1)
 	pcf8574IO8,
 	pcf8574IO9,
 	pcf8574IO10,

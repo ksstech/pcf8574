@@ -1,10 +1,8 @@
-/*
- * pcf8574.c Copyright (c) 2023 Andre M. Maree / KSS Technologies (Pty) Ltd.
- */
+// pcf8574.c - Copyright (c) 2023-24 Andre M. Maree / KSS Technologies (Pty) Ltd.
 
 #include "hal_config.h"
 
-#if (halHAS_PCF8574 > 0)
+#if (HAL_PCF8574 > 0)
 #include "pcf8574.h"
 #include "hal_i2c_common.h"
 #include "hal_options.h"
@@ -32,7 +30,7 @@
 // ######################################### Local variables #######################################
 
 static u8_t pcf8574Num = 0;
-u8_t pcf8574Cfg[halHAS_PCF8574] = {
+u8_t pcf8574Cfg[HAL_PCF8574] = {
 	#if (buildPLTFRM == HW_KC868A6)
 	0b11111111,						// INputs on 0->7 although only 0->5 used
 	0b11000000,						// OUTputs on 0->6, Unused (INputs) on 6->7
@@ -44,7 +42,7 @@ u8_t pcf8574Cfg[halHAS_PCF8574] = {
 // ######################################## Global variables #######################################
 
 u32_t xIDI_IRQsOK, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr;
-pcf8574_t sPCF8574[halHAS_PCF8574] = { NULL };
+pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
 
@@ -87,7 +85,7 @@ void pcf8574ReadHandler(void * Arg) {
 	 * If bit0 NOT 1st INput bit value should be shifted RIGHT to remove low order OUTput bits
 	 */
 	u8_t eDev = (int) Arg;
-	IF_myASSERT(debugTRACK, eDev < halHAS_PCF8574);
+	IF_myASSERT(debugTRACK, eDev < HAL_PCF8574);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
 	u8_t Mask = ~psPCF8574->Rbuf;						// Convert active LOW to HIGH
 	Mask &= psPCF8574->Mask;							// Remove OUTput bits
