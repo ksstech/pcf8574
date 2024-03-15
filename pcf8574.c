@@ -1,6 +1,6 @@
 // pcf8574.c - Copyright (c) 2023-24 Andre M. Maree / KSS Technologies (Pty) Ltd.
 
-#include "hal_config.h"
+#include "hal_platform.h"
 
 #if (HAL_PCF8574 > 0)
 #include "pcf8574.h"
