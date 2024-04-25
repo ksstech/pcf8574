@@ -152,7 +152,7 @@ void pcf8574InitIRQ(int PinNum) {
 
 /* KC868A6 specific:
  * PCF8574 at 0x22 is used for input and at 0x24 for outputs.
- * On a device used for inputs, all or some pins, changing inputs at identification stage is likely.
+ * On a device with some/all pins used for inputs,changing input pins at identification stage is likely.
  * These changing inputs will affect the values read hence the test values/mask must be carefully
  * determined. ON the KC868A6 only GPIO's 0 to 5 are used as inputs, so Gpio's 6&7 will be high.
  */
@@ -165,9 +165,11 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 		if (iRV < erSUCCESS) return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
 		#if (buildPLTFRM == HW_KC868A6)
-		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0) return erSUCCESS;
-		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) return erSUCCESS;
-		SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
+			if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0)
+				return erSUCCESS;
+			if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) 
+				return erSUCCESS;
+			SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
 		#else
 			#error "Custom test code required for this platform"
 		#endif
@@ -186,7 +188,7 @@ int	pcf8574Identify(i2c_di_t * psI2C) {
 	psI2C->Test = 1;
 	int iRV = pcf8574Check(psPCF8574);
 	if (iRV < erSUCCESS) goto exit;
-	psI2C->DevIdx = pcf8574Num++;					// mark as identified
+	psI2C->DevIdx = pcf8574Num++;						// mark as identified
 	psI2C->IDok = 1;
 	psI2C->Test = 0;
 exit:
@@ -204,7 +206,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 		goto exit;
 	psI2C->CFGok = 1;
 	// once off init....
-	if (!psI2C->CFGerr) {
+	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 		#if (buildPLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
