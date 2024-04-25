@@ -35,7 +35,6 @@ gdis_t sPCF8574_Pin = {
 		.pull_up_en = GPIO_PULLUP_DISABLE, 
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
 		.intr_type = GPIO_INTR_NEGEDGE,
-//		.intr_type = GPIO_INTR_POSEDGE,
 	},
 	{
 	#if (buildPLTFRM == HW_KC868A6)
