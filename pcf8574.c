@@ -46,6 +46,13 @@ pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
 
+int pcf8574ReportStatus(report_t * psR) { 
+	return wprintfx(psR, "L=%d R=%d S=%d C=%d D=%d - P=x%02X N=x%02X C=x%02X 0=x%02X 1=x%02X\r\n",
+		xIDI_IRQsLost, xIDI_IRQread,
+		xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, 
+		ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
+}
+
 /**
  * @brief	Read device, store result in Rbuf
  */
@@ -99,8 +106,6 @@ void pcf8574ReadHandler(void * Arg) {
 		EventMask = 0;
 		++xIDI_IRQsIgnr;
 	}
-	IF_PT(debugTRACK && (ioB2GET(dbgGDIO) & 2), "0x%02X->0x%08X (L=%d H=%d I=%d OK=%d)\r\n",
-		psPCF8574->Rbuf, EventMask, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
 }
 
 void pcf8574ReadTrigger(void * Arg) {
@@ -109,6 +114,8 @@ void pcf8574ReadTrigger(void * Arg) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574);
 	halI2C_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
+	if (debugTRACK && (ioB2GET(dbgGDIO) & 2))
+		pcf8574ReportStatus(NULL);
 }
 
 /**
@@ -279,10 +286,18 @@ int pcf8574Report(report_t * psR) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
 		if (psPCF8574->psI2C->Test) pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
-		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
-		if (psPCF8574->IRQpin == pcf8574DEV_0_IRQ)
-			iRV += wprintfx(psR, "  IRQs  L=%lu  H=%lu  I=%lu  OK=%lu", xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr, xIDI_IRQsOK);
-		iRV += wprintfx(psR, strCRLF);
+		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  ", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
+		#if (buildPLTFRM == HW_KC868A6)
+		if (i == 0) {
+			bool fSave = psR->sFM.aNL;
+			psR->sFM.aNL = 0;
+			halGDI_ReportPin(psR, i, &sPCF8574_Pin, NULL);
+			psR->sFM.aNL = fSave;
+			iRV += pcf8574ReportStatus(psR);
+		}
+		#endif
+		if	(psR->sFM.aNL)
+			iRV += wprintfx(psR, strCRLF);
 	}
 	return iRV;
 }
