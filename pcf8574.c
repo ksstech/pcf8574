@@ -107,19 +107,19 @@ static int pcf8574WriteMask(pcf8574_t * psPCF8574) {
  *	@brief	Called in context of the I2C task
  */
 void pcf8574ReadHandler(void * Arg) {
-	/* Read		--------00110011	Bit2 & 3 input pulled low, ie switch closed ie pulse
-	 * Invert	--------11001100
-	 * Masked	--------00001100	with 00111111
-	 * Shift R	--------00001100	not required, bottom 6 bits INputs
-	 * Shift L	-------000011000	evtFIRST_IDI = 1
-	 * 
-	 * Read		--------00110000
-	 * Invert	--------11001111
-	 * Mask		--------11001100	with 11111100
-	 * Shift R	--------00110011	lowest 2 bits are outputs
-	 * Shift L	-------001100110	evtFIRST_IDI = 1
+	/* ReadPrv	--------00010000	Previous reading after all corrections
 	 *
-	 * If bit0 NOT 1st INput bit value should be shifted RIGHT to remove low order OUTput bits
+	 * Read		--------11110111	Bit2 & 3 input pulled low, ie switch closed ie pulse
+	 * Invert	--------00001000	1 = closed
+	 * Masked	--------00001000	with 00111111 to remove unused/OUTput bits
+	 * Shift R	--------00001000	not required, bottom 6 bits INputs
+	 * ReadNow	--------00001000	
+	 * Compare						If same as previous reading ignore, nothing changed
+	 * Changed	--------00011000	XOR with ReadPrv leaves changed bits
+	 * 
+	 * Bit1to0	--------00010000	AND with ReadPrv leaves 1->0 changes (Not used now)
+	 * Bit0to1	--------00001000	AND with ReadNow leaves 0->1 changes
+	 * EventMask-------000011000	shift left with evtFIRST_IDI = 1
 	 */
 	u8_t eDev = (int) Arg;
 	IF_myASSERT(debugTRACK, eDev < HAL_PCF8574);
@@ -127,9 +127,10 @@ void pcf8574ReadHandler(void * Arg) {
 	u32_t EventMask = 0;
 	ReadNow = ~psPCF8574->Rbuf;							// Invert to get real value read
 	ReadNow &= psPCF8574->Mask;							// Remove OUTput bits
+	// If bit0 NOT 1st INput bit value should be shifted RIGHT to remove low order OUTput bits
 	ReadNow >>= __builtin_ctzl((u32_t) psPCF8574->Mask);	// Remove low order output (0) bits (if any)
 	if (ReadNow != ReadPrv) {
-		ReadChg = ReadPrv ^ ReadNow;					// Determine changed (0->1 or 1->0) bits
+		ReadChg = ReadPrv ^ ReadNow;					// XOR leave changed (0->1 or 1->0) bits
 		Bit0to1 = ReadChg & ReadNow;
 		Bit1to0 = ReadChg & ReadPrv;					// not used, only if trailing edge important
 		if (Bit0to1) {									// If any leading edge changes
