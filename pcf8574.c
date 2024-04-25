@@ -194,14 +194,14 @@ exit:
 }
 
 int	pcf8574Config(i2c_di_t * psI2C) {
-	if (!psI2C->IDok) return erINV_STATE;
-
+	if (!psI2C->IDok)
+		return erINV_STATE;
 	psI2C->CFGok = 0;
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
 	int iRV = pcf8574WriteMask(psPCF8574);
-	if (iRV < erSUCCESS) goto exit;
-
+	if (iRV < erSUCCESS)
+		goto exit;
 	psI2C->CFGok = 1;
 	// once off init....
 	if (!psI2C->CFGerr) {
@@ -210,7 +210,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 		if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
 		else sPCF8574[psI2C->DevIdx].IRQpin = -1;
 		#else
-		#warning " Add IRQ support if required."
+			#warning " Add IRQ support if required."
 		#endif
 	}
 exit:
@@ -219,7 +219,7 @@ exit:
 
 // ################################## Diagnostics functions ########################################
 
-int	pcf8574Diagnostics(i2c_di_t * psI2C) { return erSUCCESS; }
+int	pcf8574Diagnostics(i2c_di_t * psI2C) { myASSERT(0); return erSUCCESS; }
 
 // ###################################### Global functions #########################################
 
@@ -232,7 +232,8 @@ void pcf8574DIG_IO_SetDirection(pcf8574_io_t eChan, bool Dir) {
 	u8_t Mask = 1 << (eChan % 8);
 	// Set correct bit in mask to indicate direction
 	psPCF8574->Mask = Dir ? (psPCF8574->Mask | Mask) : (psPCF8574->Mask & ~Mask);
-	if (Dir) pcf8574WriteMask(psPCF8574);	// If set as INput, write mask to device
+	if (Dir)
+		pcf8574WriteMask(psPCF8574);					// If set as INput, write mask to device
 }
 
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
