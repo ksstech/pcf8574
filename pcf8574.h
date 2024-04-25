@@ -40,8 +40,8 @@ typedef struct __attribute__((packed)) pcf8574_t {
 	u8_t Mask;						//	all In=0xFF, all Out=0x00
 	u8_t Rbuf;
 	u8_t Wbuf;
-	u8_t IRQpin:6;
 	u8_t fDirty:1;
+	u8_t spare:7;
 } pcf8574_t;
 DUMB_STATIC_ASSERT(sizeof(pcf8574_t) == 8);
 
