@@ -23,6 +23,32 @@
 // ######################################### Structures ############################################
 // ######################################### Local constants #######################################
 
+gdis_t sPCF8574_Pin = {
+	{
+		#if (buildPLTFRM == HW_KC868A6)
+			.pin_bit_mask = (1ULL << pcf8574DEV_0_IRQ),
+		#else
+			.pin_bit_mask = 0,
+			#warning "Please add default values for new platform"
+		#endif
+		.mode = GPIO_MODE_INPUT,
+		.pull_up_en = GPIO_PULLUP_DISABLE, 
+		.pull_down_en = GPIO_PULLDOWN_DISABLE,
+		.intr_type = GPIO_INTR_NEGEDGE,
+//		.intr_type = GPIO_INTR_POSEDGE,
+	},
+	{
+	#if (buildPLTFRM == HW_KC868A6)
+		.pin = pcf8574DEV_0_IRQ,
+		.inv = 0,
+		.type = gdiINT,
+	#else
+		.pin = GPIO_NUM_NC,
+		.inv = 0,
+		.type = gdiPIN,
+	#endif
+	},
+};
 
 // ######################################### Local variables #######################################
 
@@ -38,7 +64,8 @@ u8_t pcf8574Cfg[HAL_PCF8574] = {
 
 // ######################################## Global variables #######################################
 
-u32_t xIDI_IRQsOK, xIDI_IRQsLost, xIDI_IRQsHdld, xIDI_IRQsIgnr;
+u8_t ReadPrv, ReadNow, ReadChg, Bit0to1, Bit1to0;
+u32_t xIDI_IRQsLost, xIDI_IRQread, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup;
 pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
@@ -80,7 +107,13 @@ static int pcf8574WriteMask(pcf8574_t * psPCF8574) {
  *	@brief	Called in context of the I2C task
  */
 void pcf8574ReadHandler(void * Arg) {
-	/* Read		--------00110000
+	/* Read		--------00110011	Bit2 & 3 input pulled low, ie switch closed ie pulse
+	 * Invert	--------11001100
+	 * Masked	--------00001100	with 00111111
+	 * Shift R	--------00001100	not required, bottom 6 bits INputs
+	 * Shift L	-------000011000	evtFIRST_IDI = 1
+	 * 
+	 * Read		--------00110000
 	 * Invert	--------11001111
 	 * Mask		--------11001100	with 11111100
 	 * Shift R	--------00110011	lowest 2 bits are outputs
@@ -91,28 +124,27 @@ void pcf8574ReadHandler(void * Arg) {
 	u8_t eDev = (int) Arg;
 	IF_myASSERT(debugTRACK, eDev < HAL_PCF8574);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-	u8_t Mask = ~psPCF8574->Rbuf;						// Convert active LOW to HIGH
-	Mask &= psPCF8574->Mask;							// Remove OUTput bits
-	Mask >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
-	u32_t EventMask;
-	if (Mask) {
-		EventMask = (u32_t) Mask << evtFIRST_IDI;
-		xTaskNotifyFromISR(EventsHandle, EventMask, eSetBits, NULL);
-		++xIDI_IRQsHdld;
+	u32_t EventMask = 0;
+	ReadNow = ~psPCF8574->Rbuf;							// Invert to get real value read
+	ReadNow &= psPCF8574->Mask;							// Remove OUTput bits
+	ReadNow >>= __builtin_ctzl((u32_t) psPCF8574->Mask);	// Remove low order output (0) bits (if any)
+	if (ReadNow != ReadPrv) {
+		ReadChg = ReadPrv ^ ReadNow;					// Determine changed (0->1 or 1->0) bits
+		Bit0to1 = ReadChg & ReadNow;
+		Bit1to0 = ReadChg & ReadPrv;					// not used, only if trailing edge important
+		if (Bit0to1) {									// If any leading edge changes
+			EventMask = (u32_t) Bit0to1 << evtFIRST_IDI;
+			xTaskNotify(EventsHandle, EventMask, eSetBits);
+			++xIDI_BitsSet;
+		} else {
+			++xIDI_BitsClr;
+		}
 	} else {
-		EventMask = 0;
-		++xIDI_IRQsIgnr;
+		++xIDI_BitsDup;
 	}
-}
-
-void pcf8574ReadTrigger(void * Arg) {
-	u8_t eDev = (int) Arg;
-	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-	IF_SYSTIMER_START(debugTIMING, stPCF8574);
-	halI2C_Queue(psPCF8574->psI2C, i2cRC_F, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
-	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	if (debugTRACK && (ioB2GET(dbgGDIO) & 2))
 		pcf8574ReportStatus(NULL);
+	ReadPrv = ReadNow;
 }
 
 /**
@@ -120,29 +152,31 @@ void pcf8574ReadTrigger(void * Arg) {
  * @param	Index of the PCF8574 that should be read.
  **/
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
+	int iRV;
 	/* Since the HW/HAL layer is initialised early during boot process, prior
 	 * to events/sensors/mqtt/related tasks, IRQs can occur before the system
-	 * is ready to handle them.
-	 */
+	 * is ready to handle them */
 	#define pcf8574REQ_TASKS	(taskI2C_MASK | taskEVENTS_MASK)
 	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState);
 	if ((xEBrun & pcf8574REQ_TASKS) == pcf8574REQ_TASKS) {
 		u8_t eDev = (int) Arg;
-		xTaskNotifyFromISR(EventsHandle, 1UL << eDev, eSetBits, NULL);
-		++xIDI_IRQsOK;
+		IF_myASSERT(debugTRACK && buildPLTFRM == HW_KC868A6, eDev == 0);
+		pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+		iRV = halI2C_Queue(psPCF8574->psI2C, i2cRC, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
+		++xIDI_IRQread;
 	} else {
+		iRV = erSUCCESS;
 		++xIDI_IRQsLost;
+	}
+	if (iRV == pdTRUE) {
+		portYIELD_FROM_ISR(); 
 	}
 }
 
-void pcf8574InitIRQ(int PinNum) {
-	const gpio_config_t int_pin_cfg = {
-		.pin_bit_mask = 1ULL << PinNum, .mode = GPIO_MODE_INPUT,
-		.pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
-		.intr_type = GPIO_INTR_NEGEDGE,
-	};
-	ESP_ERROR_CHECK(gpio_config(&int_pin_cfg));
-	halGPIO_IRQconfig(PinNum, pcf8574IntHandler, (void *) pcf8574DEV_0_IDX);
+void pcf8574InitIRQ(void * pvArg) {
+	IF_myASSERT(debugPARAM, INRANGE(0, (int) pvArg, pcf8574Num - 1));
+	ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
+	halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, pvArg);
 }
 
 // ################################## Diagnostics functions ########################################
@@ -158,6 +192,10 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 	do {
 		// Step 1 - read data register
 		psPCF8574->Rbuf = 0;
+		if (buildPLTFRM == HW_KC868A6 && (psPCF8574->psI2C->Addr == 0x24)) {
+			psPCF8574->Wbuf = pcf8574Cfg[psPCF8574->psI2C->DevIdx];
+			pcf8574WriteData(psPCF8574);
+		}
 		int iRV = pcf8574ReadData(psPCF8574);
 		if (iRV < erSUCCESS) return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
@@ -181,7 +219,7 @@ int	pcf8574Identify(i2c_di_t * psI2C) {
 	psPCF8574->psI2C = psI2C;
 	psI2C->Type = i2cDEV_PCF8574;
 	psI2C->Speed = i2cSPEED_100;						// does not support 400KHz
-	psI2C->TObus = 100;
+	psI2C->TObus = 5;									// was 100
 	psI2C->Test = 1;
 	int iRV = pcf8574Check(psPCF8574);
 	if (iRV < erSUCCESS) goto exit;
@@ -206,8 +244,9 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
 		#if (buildPLTFRM == HW_KC868A6)
-		if (psI2C->Addr == 0x22) pcf8574InitIRQ(sPCF8574[psI2C->DevIdx].IRQpin = pcf8574DEV_0_IRQ);
-		else sPCF8574[psI2C->DevIdx].IRQpin = -1;
+			if (psI2C->Addr == 0x22) {
+				pcf8574InitIRQ((void *)(int)psI2C->DevIdx);
+			}
 		#else
 			#warning " Add IRQ support if required."
 		#endif

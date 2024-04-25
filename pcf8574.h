@@ -62,7 +62,7 @@ int pcf8574Check(pcf8574_t * psPCF8574);
 int	pcf8574Identify(struct i2c_di_t * psI2C);
 int	pcf8574Diagnostics(struct i2c_di_t * psI2C);
 int	pcf8574Config(struct i2c_di_t * psI2C);
-void pcf8574InitIRQ(int PinNum);
+void pcf8574InitIRQ(void * pvArg);
 struct report_t;
 int pcf8574Report(struct report_t * psR);
 
