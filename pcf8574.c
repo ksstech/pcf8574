@@ -81,9 +81,7 @@ int pcf8574ReportStatus(report_t * psR) {
  * @brief	Read device, store result in Rbuf
  */
 static int pcf8574ReadData(pcf8574_t * psPCF8574) {
-	IF_SYSTIMER_START(debugTIMING, stPCF8574);
 	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cR_B, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
-	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
 }
 
@@ -91,9 +89,7 @@ static int pcf8574ReadData(pcf8574_t * psPCF8574) {
  * @brief	Write data from Wbuf to device
  */
 static int pcf8574WriteData(pcf8574_t * psPCF8574) {
-	IF_SYSTIMER_START(debugTIMING, stPCF8574);
 	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
-	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	return iRV;
 }
 
@@ -143,6 +139,7 @@ void pcf8574ReadHandler(void * Arg) {
 	} else {
 		++xIDI_BitsDup;
 	}
+	IF_SYSTIMER_STOP(debugTIMING, stPCF8574B);
 	if (debugTRACK && (ioB2GET(dbgGDIO) & 2))
 		pcf8574ReportStatus(NULL);
 	ReadPrv = ReadNow;
@@ -153,6 +150,7 @@ void pcf8574ReadHandler(void * Arg) {
  * @param	Index of the PCF8574 that should be read.
  **/
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
+	IF_SYSTIMER_START(debugTIMING, stPCF8574A);
 	int iRV;
 	/* Since the HW/HAL layer is initialised early during boot process, prior
 	 * to events/sensors/mqtt/related tasks, IRQs can occur before the system
@@ -172,6 +170,8 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	if (iRV == pdTRUE) {
 		portYIELD_FROM_ISR(); 
 	}
+	IF_SYSTIMER_STOP(debugTIMING, stPCF8574A);
+	IF_SYSTIMER_START(debugTIMING, stPCF8574B);
 }
 
 void pcf8574InitIRQ(void * pvArg) {
@@ -243,7 +243,8 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	psI2C->CFGok = 1;
 	// once off init....
 	if (psI2C->CFGerr == 0) {
-		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 200, 3200);
+		IF_SYSTIMER_INIT(debugTIMING, stPCF8574A, stMICROS, "PCF8574A", 1, 100);
+		IF_SYSTIMER_INIT(debugTIMING, stPCF8574B, stMICROS, "PCF8574B", 500, 10000);
 		#if (buildPLTFRM == HW_KC868A6)
 			if (psI2C->Addr == 0x22) {
 				pcf8574InitIRQ((void *)(int)psI2C->DevIdx);
