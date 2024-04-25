@@ -19,24 +19,21 @@
 #define	debugRESULT					(debugFLAG_GLOBAL & debugFLAG & 0x8000)
 
 // ########################################## Macros ###############################################
-
-
 // ######################################## Enumerations ###########################################
-
-
 // ######################################### Structures ############################################
+// ######################################### Local constants #######################################
 
 
 // ######################################### Local variables #######################################
 
 static u8_t pcf8574Num = 0;
 u8_t pcf8574Cfg[HAL_PCF8574] = {
-	#if (buildPLTFRM == HW_KC868A6)
+#if (buildPLTFRM == HW_KC868A6)
 	0b11111111,						// INputs on 0->7 although only 0->5 used
-	0b11000000,						// OUTputs on 0->6, Unused (INputs) on 6->7
-	#else
+	0b11000000,						// OUTputs on 0->5, Unused (INputs) on 6->7
+#else
 	#error "Please add default values for new platform"
-	#endif
+#endif
 };
 
 // ######################################## Global variables #######################################
