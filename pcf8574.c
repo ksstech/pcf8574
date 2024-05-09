@@ -324,7 +324,8 @@ int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
-		if (psPCF8574->psI2C->Test) pcf8574Check(psPCF8574);
+		if (psPCF8574->psI2C->Test)
+			pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
 		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  ", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
 		#if (buildPLTFRM == HW_KC868A6)
