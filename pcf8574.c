@@ -333,7 +333,7 @@ int pcf8574Report(report_t * psR) {
 		if (i == 0) {
 			bool fSave = psR->sFM.aNL;
 			psR->sFM.aNL = 0;
-			halGDI_ReportPin(psR, i, &sPCF8574_Pin, NULL);
+			iRV += halGDI_ReportPin(psR, i, &sPCF8574_Pin, NULL);
 			psR->sFM.aNL = fSave;
 			iRV += pcf8574ReportStatus(psR);
 		}
