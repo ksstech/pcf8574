@@ -64,16 +64,14 @@ u8_t pcf8574Cfg[HAL_PCF8574] = {
 // ######################################## Global variables #######################################
 
 u8_t ReadPrv, ReadNow, ReadChg, Bit0to1, Bit1to0;
-u32_t xIDI_IRQsLost, xIDI_IRQread, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup;
+u32_t xIDI_IRQsLost, xIDI_IRQread, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, xIDI_IRQyield;
 pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 
 // ####################################### Local functions #########################################
 
 int pcf8574ReportStatus(report_t * psR) { 
-	return wprintfx(psR, "L=%d R=%d S=%d C=%d D=%d - P=x%02X N=x%02X C=x%02X 0=x%02X 1=x%02X\r\n",
-		xIDI_IRQsLost, xIDI_IRQread,
-		xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, 
-		ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
+	return wprintfx(psR, "L=%lu R=%lu Y=%lu S=%lu C=%lu D=%lu - P=x%02X  N=x%02X  C=x%02X  0=x%02X  1=x%02X" strNL, xIDI_IRQsLost,
+		xIDI_IRQread, xIDI_IRQyield, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
 }
 
 /**
@@ -166,6 +164,7 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		++xIDI_IRQsLost;
 	}
 	if (iRV == pdTRUE) {
+		++xIDI_IRQyield;
 		portYIELD_FROM_ISR(); 
 	}
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574A);
