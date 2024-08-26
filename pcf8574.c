@@ -151,9 +151,8 @@ void pcf8574ReadHandler(void * Arg) {
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574A);
 	int iRV;
-	/* Since the HW/HAL layer is initialised early during boot process, prior
-	 * to events/sensors/mqtt/related tasks, IRQs can occur before the system
-	 * is ready to handle them */
+	// Since the HW/HAL layer is initialised early during boot process, prior to events 
+	// sensors, mqtt or related tasks, IRQs can occur before system is ready to handle them
 	#define pcf8574REQ_TASKS	(taskI2C_MASK | taskEVENTS_MASK)
 	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState);
 	if ((xEBrun & pcf8574REQ_TASKS) == pcf8574REQ_TASKS) {
@@ -192,22 +191,25 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 	do {
 		// Step 1 - read data register
 		psPCF8574->Rbuf = 0;
-		if (buildPLTFRM == HW_KC868A6 && (psPCF8574->psI2C->Addr == 0x24)) {
+	#if (buildPLTFRM == HW_KC868A6)
+		if (psPCF8574->psI2C->Addr == 0x24) {
 			psPCF8574->Wbuf = pcf8574Cfg[psPCF8574->psI2C->DevIdx];
 			pcf8574WriteData(psPCF8574);
 		}
+	#endif
 		int iRV = pcf8574ReadData(psPCF8574);
-		if (iRV < erSUCCESS) return iRV;
+		if (iRV < erSUCCESS)
+			return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
-		#if (buildPLTFRM == HW_KC868A6)
-			if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0)
-				return erSUCCESS;
-			if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) 
-				return erSUCCESS;
-			SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
-		#else
-			#error "Custom test code required for this platform"
-		#endif
+	#if (buildPLTFRM == HW_KC868A6)
+		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0)
+			return erSUCCESS;
+		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) 
+			return erSUCCESS;
+		SL_ERR("i=%d  A=x%X R=x%02X", iRV, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
+	#else
+		#error "Custom test code required for this platform"
+	#endif
 		psPCF8574->Wbuf = 0xFF;							// set all 1's = Inputs
 		pcf8574WriteData(psPCF8574);
 	} while(++Count < 5);
@@ -222,7 +224,8 @@ int	pcf8574Identify(i2c_di_t * psI2C) {
 	psI2C->TObus = 5;									// was 100
 	psI2C->Test = 1;
 	int iRV = pcf8574Check(psPCF8574);
-	if (iRV < erSUCCESS) goto exit;
+	if (iRV < erSUCCESS)
+		goto exit;
 	psI2C->DevIdx = pcf8574Num++;						// mark as identified
 	psI2C->IDok = 1;
 	psI2C->Test = 0;
@@ -244,13 +247,12 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574A, stMICROS, "PCF8574A", 1, 100);
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574B, stMICROS, "PCF8574B", 500, 10000);
-		#if (buildPLTFRM == HW_KC868A6)
-			if (psI2C->Addr == 0x22) {
-				pcf8574InitIRQ((void *)(int)psI2C->DevIdx);
-			}
-		#else
-			#warning " Add IRQ support if required."
-		#endif
+	#if (buildPLTFRM == HW_KC868A6)
+		if (psI2C->Addr == 0x22)
+			pcf8574InitIRQ((void *)(int)psI2C->DevIdx);
+	#else
+		#warning " Add IRQ support if required."
+	#endif
 	}
 exit:
 	return iRV;
