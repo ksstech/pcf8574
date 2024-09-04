@@ -339,7 +339,7 @@ int pcf8574Report(report_t * psR) {
 		}
 		#endif
 		if	(psR->sFM.aNL)
-			iRV += wprintfx(psR, strCRLF);
+			iRV += wprintfx(psR, strNL);
 	}
 	return iRV;
 }
