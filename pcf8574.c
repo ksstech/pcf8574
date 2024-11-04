@@ -6,7 +6,7 @@
 #include "pcf8574.h"
 #include "hal_i2c_common.h"
 #include "hal_options.h"
-#include "x_errors_events.h"
+#include "errors_events.h"
 #include "printfx.h"
 #include "syslog.h"
 #include "systiming.h"
