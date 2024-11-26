@@ -171,12 +171,6 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	IF_SYSTIMER_START(debugTIMING, stPCF8574B);
 }
 
-void pcf8574InitIRQ(void * pvArg) {
-	IF_myASSERT(debugPARAM, INRANGE(0, (int) pvArg, pcf8574Num - 1));
-	ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
-	halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, pvArg);
-}
-
 // ################################## Diagnostics functions ########################################
 
 /* KC868A6 specific:
@@ -247,8 +241,10 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574A, stMICROS, "PCF8574A", 1, 100);
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574B, stMICROS, "PCF8574B", 500, 10000);
 	#if (buildPLTFRM == HW_KC868A6)
-		if (psI2C->Addr == 0x22)
-			pcf8574InitIRQ((void *)(int)psI2C->DevIdx);
+		if (psI2C->Addr == 0x22) {
+			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
+			halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)(int)psI2C->DevIdx);
+		}
 	#else
 		#warning " Add IRQ support if required."
 	#endif
