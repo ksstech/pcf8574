@@ -25,12 +25,12 @@
 
 gdis_t sPCF8574_Pin = {
 	{
-		#if (buildPLTFRM == HW_KC868A6)
-			.pin_bit_mask = (1ULL << pcf8574DEV_0_IRQ),
-		#else
-			.pin_bit_mask = 0,
-			#warning "Please add default values for new platform"
-		#endif
+	#if (buildPLTFRM == HW_KC868A6)
+		.pin_bit_mask = (1ULL << pcf8574DEV_0_IRQ),
+	#else
+		.pin_bit_mask = 0,
+		#warning "Please add default values for new platform"
+	#endif
 		.mode = GPIO_MODE_INPUT,
 		.pull_up_en = GPIO_PULLUP_DISABLE, 
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -38,13 +38,9 @@ gdis_t sPCF8574_Pin = {
 	},
 	{
 	#if (buildPLTFRM == HW_KC868A6)
-		.pin = pcf8574DEV_0_IRQ,
-		.inv = 0,
-		.type = gdiINT,
+		.pin = pcf8574DEV_0_IRQ, .inv = 0, .type = gdiINT,
 	#else
-		.pin = GPIO_NUM_NC,
-		.inv = 0,
-		.type = gdiPIN,
+		.pin = GPIO_NUM_NC, .inv = 0, .type = gdiPIN,
 	#endif
 	},
 };
@@ -86,8 +82,7 @@ static int pcf8574ReadData(pcf8574_t * psPCF8574) {
  * @brief	Write data from Wbuf to device
  */
 static int pcf8574WriteData(pcf8574_t * psPCF8574) {
-	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
-	return iRV;
+	return halI2C_Queue(psPCF8574->psI2C, i2cW, &psPCF8574->Wbuf, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 }
 
 static int pcf8574WriteMask(pcf8574_t * psPCF8574) {
@@ -137,8 +132,7 @@ void pcf8574ReadHandler(void * Arg) {
 		++xIDI_BitsDup;
 	}
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574B);
-	if (debugTRACK && (ioB2GET(dbgGDIO) & 2))
-		pcf8574ReportStatus(NULL);
+	if (debugTRACK && (ioB2GET(dbgGDIO) & 2)) pcf8574ReportStatus(NULL);
 	ReadPrv = ReadNow;
 }
 
