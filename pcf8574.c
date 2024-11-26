@@ -141,22 +141,20 @@ void pcf8574ReadHandler(void * Arg) {
  * @param	Index of the PCF8574 that should be read.
  **/
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
-	IF_SYSTIMER_START(debugTIMING, stPCF8574A);
-	int iRV;
-	// Since the HW/HAL layer is initialised early during boot process, prior to events 
-	// sensors, mqtt or related tasks, IRQs can occur before system is ready to handle them
 	#define pcf8574REQ_TASKS	(taskI2C_MASK | taskEVENTS_MASK)
 	EventBits_t xEBrun = xEventGroupGetBitsFromISR(TaskRunState);
-	if ((xEBrun & pcf8574REQ_TASKS) == pcf8574REQ_TASKS) {
-		u8_t eDev = (int) Arg;
-		IF_myASSERT(debugTRACK && buildPLTFRM == HW_KC868A6, eDev == 0);
-		pcf8574_t * psPCF8574 = &sPCF8574[eDev];
-		iRV = halI2C_Queue(psPCF8574->psI2C, i2cRC, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
-		++xIDI_IRQread;
-	} else {
-		iRV = erSUCCESS;
+	// Since the HW/HAL layer is initialised early during boot process, prior to events 
+	// sensors, mqtt or related tasks, IRQs can occur before system is ready to handle them
+	if ((xEBrun & pcf8574REQ_TASKS) != pcf8574REQ_TASKS) {
 		++xIDI_IRQsLost;
+		return;
 	}
+	IF_SYSTIMER_START(debugTIMING, stPCF8574A);
+	u8_t eDev = (int) Arg;
+	IF_myASSERT(debugTRACK && buildPLTFRM == HW_KC868A6, eDev == 0);
+	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cRC, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
+	++xIDI_IRQread;
 	if (iRV == pdTRUE) {
 		++xIDI_IRQyield;
 		portYIELD_FROM_ISR(); 
