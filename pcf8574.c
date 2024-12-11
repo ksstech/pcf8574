@@ -153,7 +153,6 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		++xIDI_IRQsLost;
 		return;
 	}
-	IF_SYSTIMER_START(debugTIMING, stPCF8574A);
 	u8_t eDev = (int) Arg;
 	IF_myASSERT(debugTRACK && buildPLTFRM == HW_KC868A6, eDev == 0);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
@@ -163,8 +162,6 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		++xIDI_IRQyield;
 		portYIELD_FROM_ISR(); 
 	}
-	IF_SYSTIMER_STOP(debugTIMING, stPCF8574A);
-	IF_SYSTIMER_START(debugTIMING, stPCF8574B);
 }
 
 // ################################## Diagnostics functions ########################################
