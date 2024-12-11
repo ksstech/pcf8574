@@ -10,6 +10,7 @@
 #include "printfx.h"
 #include "syslog.h"
 #include "systiming.h"
+#include "task_events.h"
 
 #define	debugFLAG					0xF000
 
@@ -19,8 +20,11 @@
 #define	debugRESULT					(debugFLAG_GLOBAL & debugFLAG & 0x8000)
 
 // ########################################## Macros ###############################################
+
 // ######################################## Enumerations ###########################################
+
 // ######################################### Structures ############################################
+
 // ######################################### Local constants #######################################
 
 gdis_t sPCF8574_Pin = {
@@ -138,7 +142,7 @@ void pcf8574ReadHandler(void * Arg) {
 
 /**
  * @brief	Trigger read of the PCF8574, schedule CB to handle the result
- * @param	Index of the PCF8574 that should be read.
+ * @param	Arg - index of the PCF8574 that should be read.
  **/
 void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 	#define pcf8574REQ_TASKS	(taskI2C_MASK | taskEVENTS_MASK)
@@ -313,8 +317,7 @@ int pcf8574Report(report_t * psR) {
 	int iRV = 0;
 	for (u8_t i = 0; i < pcf8574Num; ++i) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
-		if (psPCF8574->psI2C->Test)
-			pcf8574Check(psPCF8574);
+		if (psPCF8574->psI2C->Test)					pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
 		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  ", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
 		#if (buildPLTFRM == HW_KC868A6)
@@ -326,8 +329,7 @@ int pcf8574Report(report_t * psR) {
 			iRV += pcf8574ReportStatus(psR);
 		}
 		#endif
-		if	(psR->sFM.aNL)
-			iRV += wprintfx(psR, strNL);
+		if	(psR->sFM.aNL) iRV += wprintfx(psR, strNL);
 	}
 	return iRV;
 }
