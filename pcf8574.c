@@ -153,9 +153,7 @@ void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		++xIDI_IRQsLost;
 		return;
 	}
-	u8_t eDev = (int) Arg;
-	IF_myASSERT(debugTRACK && buildPLTFRM == HW_KC868A6, eDev == 0);
-	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
+	pcf8574_t * psPCF8574 = &sPCF8574[(int) Arg];
 	int iRV = halI2C_Queue(psPCF8574->psI2C, i2cRC, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t), (i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg);
 	++xIDI_IRQread;
 	if (iRV == pdTRUE) {
