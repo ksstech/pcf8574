@@ -274,31 +274,34 @@ bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
 	return (psPCF8574->Wbuf >> Pnum) & 1;				// Initially not correct if last write was mask.
 }
 
+bool pcf8574DIG_OUT_WriteAll(pcf8574_io_t eChan) {
+	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
+	if (psPCF8574->fDirty == 0) return 0;
+	pcf8574WriteData(&sPCF8574[eChan/8]);
+	psPCF8574->fDirty = 0;
+	return 1;
+}
+
 bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState) {
 	IF_myASSERT(debugPARAM, (eChan < pcf8574NUM_PINS))
 	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
 	u8_t Pnum = eChan % 8;
 	// Check pin is configured as output
-	IF_myASSERT(debugPARAM, ((psPCF8574->Mask >> Pnum) & 1) == 0);
+	IF_myASSERT(debugTRACK, ((psPCF8574->Mask >> Pnum) & 1) == 0);
 	bool CurState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;	// Active LOW ie inverted
-	bool bRV = NewState != CurState ? 1 : 0;
-	if (bRV) {
+	if (NewState != CurState) {							// if different update buffered status
 		psPCF8574->Wbuf = NewState ? psPCF8574->Wbuf & ~(1 << Pnum) : psPCF8574->Wbuf | (1 << Pnum);
-		psPCF8574->fDirty = 1;							// bit changed, mark buffer as dirty
+		psPCF8574->fDirty = 1;							// and mark buffered status as dirty
 	}
-	return bRV;
+	return psPCF8574->fDirty;
 }
 
 bool pcf8574DIG_OUT_SetState(pcf8574_io_t eChan, bool NewState) {
-	int bRV = pcf8574DIG_OUT_SetStateLazy(eChan, NewState);
-	if (bRV) {
-		pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
-		pcf8574WriteData(psPCF8574);
-	}
-	return bRV;
+	pcf8574DIG_OUT_SetStateLazy(eChan, NewState);		// initially treat as LAZY
+	return pcf8574DIG_OUT_WriteAll(eChan);				// write to device [if changed]
 }
 
-void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
+bool pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
 	IF_myASSERT(debugPARAM, (eChan < pcf8574NUM_PINS))
 	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
 	u8_t Pnum = eChan % 8;
@@ -306,6 +309,7 @@ void pcf8574DIG_OUT_Toggle(pcf8574_io_t eChan) {
 	IF_myASSERT(debugPARAM, ((psPCF8574->Mask >> Pnum) & 1) == 0);
 	bool NewState = (psPCF8574->Wbuf >> Pnum) & 1 ? 0 : 1;
 	pcf8574DIG_OUT_SetState(eChan, NewState);
+	return NewState;
 }
 
 int pcf8574Report(report_t * psR) {
