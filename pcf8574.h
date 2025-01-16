@@ -53,9 +53,30 @@ void pcf8574ReadTrigger(void * Arg);
 
 void pcf8574DIG_IO_SetDirection(pcf8574_io_t eCh, bool Dir);
 bool pcf8574DIG_IO_GetState(pcf8574_io_t eCh);
+
+/**
+ * @brief	Check if buffer is dirty, if so write to device.
+ * @return	1/true if status written else 0/false
+ */
+bool pcf8574DIG_OUT_WriteAll(pcf8574_io_t eCh);
+
+/**
+ * @brief	Update buffered pin status without writing new status to device
+ * @return	1/true if buffer is dirty/changed else 0/false
+ */
 bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eCh, bool NewState);
+
+/**
+ * @brief	Update buffered pin status and [if changed] write status to device
+ * @return	1/true if status written else 0/false
+ */
 bool pcf8574DIG_OUT_SetState(pcf8574_io_t eCh, bool NewState);
-void pcf8574DIG_OUT_Toggle(pcf8574_io_t eCh);
+
+/**
+ * @brief	toggle pin status and write status to device
+ * @return	pin status after toggled
+ */
+bool pcf8574DIG_OUT_Toggle(pcf8574_io_t eCh);
 
 int pcf8574Check(pcf8574_t * psPCF8574);
 int	pcf8574Identify(struct i2c_di_t * psI2C);
