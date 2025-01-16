@@ -1,4 +1,4 @@
-// pcf8574.c - Copyright (c) 2023-24 Andre M. Maree / KSS Technologies (Pty) Ltd.
+// pcf8574.c - Copyright (c) 2023-25 Andre M. Maree / KSS Technologies (Pty) Ltd.
 
 #include "hal_platform.h"
 
