@@ -29,7 +29,7 @@
 
 gdis_t sPCF8574_Pin = {
 	{
-	#if (buildPLTFRM == HW_KC868A6)
+	#if (appPLTFRM == HW_KC868A6)
 		.pin_bit_mask = (1ULL << pcf8574DEV_0_IRQ),
 	#else
 		.pin_bit_mask = 0,
@@ -41,7 +41,7 @@ gdis_t sPCF8574_Pin = {
 		.intr_type = GPIO_INTR_NEGEDGE,	/* if numerous devices use interrupts, change to level */
 	},
 	{
-	#if (buildPLTFRM == HW_KC868A6)
+	#if (appPLTFRM == HW_KC868A6)
 		.pin = pcf8574DEV_0_IRQ, .inv = 0, .type = gdiINT,
 	#else
 		.pin = GPIO_NUM_NC, .inv = 0, .type = gdiPIN,
@@ -53,7 +53,7 @@ gdis_t sPCF8574_Pin = {
 
 static u8_t pcf8574Num = 0;
 u8_t pcf8574Cfg[HAL_PCF8574] = {
-#if (buildPLTFRM == HW_KC868A6)
+#if (appPLTFRM == HW_KC868A6)
 	0b11111111,						// INputs on 0->7 although only 0->5 used
 	0b11000000,						// OUTputs on 0->5, Unused (INputs) on 6->7
 #else
@@ -175,7 +175,7 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 	do {
 		// Step 1 - read data register
 		psPCF8574->Rbuf = 0;
-	#if (buildPLTFRM == HW_KC868A6)
+	#if (appPLTFRM == HW_KC868A6)
 		if (psPCF8574->psI2C->Addr == 0x24) {
 			psPCF8574->Wbuf = pcf8574Cfg[psPCF8574->psI2C->DevIdx];
 			pcf8574WriteData(psPCF8574);
@@ -185,7 +185,7 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 		if (iRV < erSUCCESS)
 			return iRV;
 		// Step 2 - Check initial default values, should be all 1's after PowerOnReset
-	#if (buildPLTFRM == HW_KC868A6)
+	#if (appPLTFRM == HW_KC868A6)
 		if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0)
 			return erSUCCESS;
 		if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) 
@@ -231,7 +231,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574A, stMICROS, "PCF8574A", 1, 100);
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574B, stMICROS, "PCF8574B", 500, 10000);
-	#if (buildPLTFRM == HW_KC868A6)
+	#if (appPLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) {
 			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
 			halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)(int)psI2C->DevIdx);
@@ -319,7 +319,7 @@ int pcf8574Report(report_t * psR) {
 		if (psPCF8574->psI2C->Test)					pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
 		iRV += wprintfx(psR, "Mask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX  ", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
-		#if (buildPLTFRM == HW_KC868A6)
+		#if (appPLTFRM == HW_KC868A6)
 		if (i == 0) {
 			bool fSave = psR->sFM.aNL;
 			psR->sFM.aNL = 0;
