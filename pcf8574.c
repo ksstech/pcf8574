@@ -224,23 +224,26 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	psI2C->CFGok = 0;
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
-	int iRV = pcf8574WriteMask(psPCF8574);
-	if (iRV < erSUCCESS)
+	iRV = pcf8574WriteMask(psPCF8574);
+	if (iRV < erSUCCESS) {
+		halEventUpdateDevice(devMASK_PCF8574, 0);		/* device not functional */
 		goto exit;
-	psI2C->CFGok = 1;
+	}
 	// once off init....
 	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574A, stMICROS, "PCF8574A", 1, 100);
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574B, stMICROS, "PCF8574B", 500, 10000);
-	#if (appPLTFRM == HW_KC868A6)
-		if (psI2C->Addr == 0x22) {
-			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
-			halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)(int)psI2C->DevIdx);
-		}
-	#else
-		#warning " Add IRQ support if required."
-	#endif
+		#if (appPLTFRM == HW_KC868A6)
+			if (psI2C->Addr == 0x22) {
+				ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
+				halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)(int)psI2C->DevIdx);
+			}
+		#else
+			#warning " Add IRQ support if required."
+		#endif
 	}
+	psI2C->CFGok = 1;
+	halEventUpdateDevice(devMASK_PCF8574, 1);
 exit:
 	return iRV;
 }
