@@ -136,7 +136,7 @@ void pcf8574ReadHandler(void * Arg) {
 		++xIDI_BitsDup;
 	}
 	IF_SYSTIMER_STOP(debugTIMING, stPCF8574B);
-	if (debugTRACK && (ioB2GET(dbgGDIO) & 2)) pcf8574ReportStatus(NULL);
+	if (debugTRACK && (xOptionGet(dbgGDIO) & 2)) pcf8574ReportStatus(NULL);
 	ReadPrv = ReadNow;
 }
 
