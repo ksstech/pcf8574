@@ -218,8 +218,9 @@ exit:
 }
 
 int	pcf8574Config(i2c_di_t * psI2C) {
-	if (!psI2C->IDok)
-		return erINV_STATE;
+	int iRV = erINV_STATE;								/* default return error code */
+	if (psI2C->IDok = 0)
+		goto exit;
 	psI2C->CFGok = 0;
 	pcf8574_t * psPCF8574 = &sPCF8574[psI2C->DevIdx];
 	psPCF8574->Mask = pcf8574Cfg[psI2C->DevIdx];
