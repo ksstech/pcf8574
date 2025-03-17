@@ -254,6 +254,17 @@ int	pcf8574Diagnostics(i2c_di_t * psI2C) { myASSERT(0); return erSUCCESS; }
 
 // ###################################### Global functions #########################################
 
+bool pcf8574DIG_OUT_WriteAll(pcf8574_io_t eChan) {
+	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
+	if (psPCF8574->fDirty) {
+		pcf8574WriteData(&sPCF8574[eChan/8]);
+		psPCF8574->fDirty = 0;
+		return 1;
+	}
+	return 0;
+}
+
+
 /**
  * @brief	Set pin direction to be OUTput (0) or INput (1)
  */
@@ -276,14 +287,6 @@ bool pcf8574DIG_IO_GetState(pcf8574_io_t eChan) {
 		return (psPCF8574->Rbuf >> Pnum) & 1;
 	}
 	return (psPCF8574->Wbuf >> Pnum) & 1;				// Initially not correct if last write was mask.
-}
-
-bool pcf8574DIG_OUT_WriteAll(pcf8574_io_t eChan) {
-	pcf8574_t * psPCF8574 = &sPCF8574[eChan/8];
-	if (psPCF8574->fDirty == 0) return 0;
-	pcf8574WriteData(&sPCF8574[eChan/8]);
-	psPCF8574->fDirty = 0;
-	return 1;
 }
 
 bool pcf8574DIG_OUT_SetStateLazy(pcf8574_io_t eChan, bool NewState) {
