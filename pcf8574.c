@@ -39,7 +39,13 @@
 
 #if (appPLTFRM == HW_KC868A6)
 gdis_t sPCF8574_Pin = {
+//	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_LOW_LEVEL },	// crash in gpio_isr_loop()
+//	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_ANYEDGE },	// loses 1st IRQ
+//	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_POSEDGE },	// most IRQs lost
+//	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_ENABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_POSEDGE },		// loses 1st IRQ
 	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_NEGEDGE },	// loses 1st IRQ
+//	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_ENABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_NEGEDGE },		// loses 1st IRQ, NEW eventually work
+	{ GPIO_NUM_13, 0, gdiINT },
 };
 
 u8_t pcf8574Cfg[HAL_PCF8574] = {
@@ -262,7 +268,7 @@ int pcf8574Flush(pcf8574_io_t eChan) {
 	for (int i = Beg; i < End; ++i) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
 		if (psPCF8574->fDirty) {
-			IF_RPT(debugFLUSH, " [B=%d N=%d End=%d D=x%02X", Beg, i, End, psPCF8574->Wbuf);
+			IF_RPT(debugFLUSH, " [Beg=%d Now=%d End=%d D=x%02X", Beg, i, End, psPCF8574->Wbuf);
 			u8_t U8inv = psPCF8574->fInvert ? ~psPCF8574->Wbuf : psPCF8574->Wbuf;
 			IF_RP(debugFLUSH, "->x%02X", U8inv);
 			U8inv &= ~psPCF8574->Mask;
@@ -300,7 +306,7 @@ int pcf8574Function(pcf8574func_e Func, u8_t eChan, bool NewState) {
 	if (Func >= stateTGL_LAZY) {						// MUST be OUTput type function
 		IF_myASSERT(debugTRACK, (psPCF8574->Mask & Mask) == 0);
 		bool CurState = psPCF8574->Wbuf & Mask ? 1 : 0;
-		if (Func <= stateTGL) {							// stateTGL[_LAZY] no NewState specified
+		if (Func <= stateTGL) {							// stateTGL[_LAZY]
 			NewState = !CurState;						// calculate NewState
 			Func += (stateSET_LAZY - stateTGL_LAZY);	// stateTGL[_LAZY] -> stateSET[_LAZY]
 		}
@@ -325,10 +331,8 @@ int pcf8574Function(pcf8574func_e Func, u8_t eChan, bool NewState) {
 		IF_myASSERT(debugTRACK, 0);						// not supported on PCF8574
 
 	} else if (Func == cfgDIR) {						// Direction 1=INput vs 0=OUTput
-		if (NewState)
-			psPCF8574->Mask |= Mask;
-		else 
-			psPCF8574->Mask &= ~Mask;
+		if (NewState)	psPCF8574->Mask |= Mask;
+		else			psPCF8574->Mask &= ~Mask;
 		if (NewState)
 			pcf8574Write(psPCF8574, psPCF8574->Mask);
 	}
