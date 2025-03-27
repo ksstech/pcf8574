@@ -7,7 +7,7 @@
 #include "hal_i2c_common.h"
 #include "hal_options.h"
 #include "errors_events.h"
-#include "printfx.h"
+#include "report.h"
 #include "syslog.h"
 #include "systiming.h"
 #include "task_events.h"
