@@ -320,10 +320,7 @@ int pcf8574Function(pcf8574func_e Func, u8_t eChan, bool NewState) {
 	} else if (Func == stateGET) {						// Can be INPut or OUTput....
 		if (psPCF8574->Mask & Mask) {					// Input pin?
 			int iRV = pcf8574ReadData(psPCF8574);		// read live status
-			if (iRV == erSUCCESS)
-				return (psPCF8574->Rbuf & Mask) ? 1 : 0;
-			IF_myASSERT(debugRESULT, 0);
-			return xSyslogError(__FUNCTION__, iRV);
+			return (iRV == erSUCCESS) ? ((psPCF8574->Rbuf & Mask) ? 1 : 0) : xSyslogError(__FUNCTION__, iRV);
 		}
 		return (psPCF8574->Wbuf & Mask) ? 1 : 0;		// Initially not correct if last write was mask.
 
