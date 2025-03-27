@@ -315,7 +315,7 @@ int pcf8574Function(pcf8574func_e Func, u8_t eChan, bool NewState) {
 			else			psPCF8574->Wbuf &= ~Mask;
 			psPCF8574->fDirty = 1;						// bit just changed, show as dirty
 		}
-		return (Func < stateSET) ? psPCF8574->fDirty : pcf8574Flush(eChan);
+		return (Func <= stateSET_LAZY) ? psPCF8574->fDirty : pcf8574Flush(eChan);
 
 	} else if (Func == stateGET) {						// Can be INPut or OUTput....
 		if (psPCF8574->Mask & Mask) {					// Input pin?
