@@ -73,10 +73,10 @@ pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 int pcf8574ReportStatus(report_t * psR) {
 	int iRV = 0;
 	#if(debugCOUNTERS)
-	iRV += wprintfx(psR, "\tLost=%lu Read=%lu Yield=%lu Set=%lu Clr=%lu Dup=%lu ",
+	iRV += report(psR, "\tLost=%lu Read=%lu Yield=%lu Set=%lu Clr=%lu Dup=%lu ",
 		xIDI_IRQsLost, xIDI_IRQread, xIDI_IRQyield, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup);
 	#endif
-	iRV += wprintfx(psR, "Prv=x%02X  Now=x%02X Chg=x%02X 0to1=x%02X 1to0=x%02X" strNL, ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
+	iRV += report(psR, "Prv=x%02X  Now=x%02X Chg=x%02X 0to1=x%02X 1to0=x%02X" strNL, ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
 	return iRV;
 }
 
@@ -343,7 +343,7 @@ int pcf8574Report(report_t * psR) {
 		if (psPCF8574->psI2C->Test)
 			pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
-		iRV += wprintfx(psR, "\tMask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX" strNL "\t", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
+		iRV += report(psR, "\tMask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX" strNL "\t", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
 		#if (appPLTFRM == HW_KC868A6)
 		if (i == 0) {
 			iRV += halGDI_ReportPin(psR, i, &sPCF8574_Pin, NULL);
@@ -351,7 +351,7 @@ int pcf8574Report(report_t * psR) {
 		}
 		#endif
 		if	(psR->sFM.aNL)
-			iRV += wprintfx(psR, strNL);
+			iRV += report(psR, strNL);
 	}
 	return iRV;
 }
