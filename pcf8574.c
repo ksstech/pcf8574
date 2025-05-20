@@ -5,7 +5,6 @@
 #if (HAL_PCF8574 > 0)
 #include "pcf8574.h"
 #include "hal_i2c_common.h"
-#include "hal_options.h"
 #include "errors_events.h"
 #include "report.h"
 #include "syslog.h"
