@@ -35,7 +35,7 @@
 
 // ######################################### Local constants #######################################
 
-#if (appPLTFRM == HW_KC868A6)
+#if (cmakePLTFRM == HW_KC868A6)
 gdis_t sPCF8574_Pin = {
 //	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_LOW_LEVEL },	// crash in gpio_isr_loop()
 //	{ 1ULL << GPIO_NUM_13, GPIO_MODE_INPUT, GPIO_PULLUP_DISABLE, GPIO_PULLDOWN_DISABLE, GPIO_INTR_ANYEDGE },	// loses 1st IRQ
@@ -115,7 +115,7 @@ static void pcf8574ReadHandler(void * Arg) {
 	ReadNow = psPCF8574->fInvINP ? ~psPCF8574->Rbuf : psPCF8574->Rbuf;
 	ReadNow &= psPCF8574->Mask;							// Remove OUTput bits
 	// If bit0 NOT 1st INput bit, shift RIGHT to remove low order OUTput/0 bits
-#if (appPLTFRM == HW_KC868A6)
+#if (cmakePLTFRM == HW_KC868A6)
 	// No low order bits used as OUTputs, bits 0->5 consecutive INputs 
 #else
 	ReadNow >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
@@ -297,7 +297,7 @@ int pcf8574Check(pcf8574_t * psPCF8574) {
 			return iRV;
 		IF_RP(debugCONFIG, "Addr=x%02X  Read=x%02X" strNL, psPCF8574->psI2C->Addr, psPCF8574->Rbuf);
 		// Step 3 - Check device specific pin signature
-		#if (appPLTFRM == HW_KC868A6)
+		#if (cmakePLTFRM == HW_KC868A6)
 			if ((psPCF8574->psI2C->Addr == 0x22) && (psPCF8574->Rbuf & 0xC0) == 0xC0)
 				return erSUCCESS;
 			if ((psPCF8574->psI2C->Addr == 0x24) && (psPCF8574->Rbuf == 0xFF)) 
@@ -332,7 +332,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	psI2C->CFGok = 0;
 	int Idx = psI2C->DevIdx;
 	pcf8574_t * psPCF8574 = &sPCF8574[Idx];
-#if (appPLTFRM == HW_KC868A6)						// device specific IN/OUT config
+#if (cmakePLTFRM == HW_KC868A6)						// device specific IN/OUT config
 	iRV = pcf8574Write(psPCF8574, psPCF8574->Mask = pcf8574Cfg[Idx]);
 	if (iRV >= erSUCCESS && psI2C->Addr == 0x24) {
 		psPCF8574->Wbuf = 0x00;
@@ -346,7 +346,7 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	// once off init....
 	if (psI2C->CFGerr == 0) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 1, 100);
-#if (appPLTFRM == HW_KC868A6)
+#if (cmakePLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) {
 			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));
 			halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)Idx);
@@ -384,7 +384,7 @@ int pcf8574Report(report_t * psR) {
 			pcf8574Check(psPCF8574);
 		iRV += halI2C_DeviceReport(psR, (void *) psPCF8574->psI2C);
 		iRV += xReport(psR, "\tMask=0x%02hX  Rbuf=0x%02hX  Wbuf=0x%02hX" strNL "\t", psPCF8574->Mask, psPCF8574->Rbuf, psPCF8574->Wbuf);
-		#if (appPLTFRM == HW_KC868A6)
+		#if (cmakePLTFRM == HW_KC868A6)
 		if (i == 0) {
 			iRV += halGDI_ReportPin(psR, i, &sPCF8574_Pin, NULL);
 			iRV += pcf8574ReportStatus(psR);
