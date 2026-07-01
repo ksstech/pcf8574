@@ -212,6 +212,10 @@ int pcf8574DevFunction(pcf8574dev_func_e DevFunc, int Dev, u8_t Mask, bool State
  */
 int pcf8574Report(struct report_t * psR);
 
+// Pulse-counter stress self-test (KC868-A6 relay->opto loopback); defined ONLY when the pcf8574.c
+// debugSTRESS bit is set. Not wired to any key - call manually (e.g. at startup) if required.
+int pcf8574StressTest(struct report_t * psR);
+
 #ifdef __cplusplus
 }
 #endif
