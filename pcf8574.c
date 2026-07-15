@@ -13,7 +13,7 @@
 
 // ########################################## Macros ###############################################
 
-#define	debugFLAG					0xF004
+#define	debugFLAG					0xF00C
 #define	debugCONFIG					(debugFLAG & 0x0001)
 #define	debugFLUSH					(debugFLAG & 0x0002)
 #define	debugCOUNTERS				(debugFLAG & 0x0004)
