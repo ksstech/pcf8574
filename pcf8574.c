@@ -30,10 +30,6 @@
 	#define incrCOUNTER(c)
 #endif
 
-// Max consecutive level-drain re-reads in a single chain. Bounds CPU/bus use if nINT is held low
-// by a stuck/oscillating line (a HW fault). ~16 reads @100kHz ~ 5ms; real bursts settle far sooner.
-#define	pcf8574IRQ_REARM_MAX		16
-
 #if debugSTRESS
 // Stress self-test (pcf8574StressTest): drives ALL 6 relays (0x24) simultaneously in one I2C write,
 // N cycles, at the fastest rate the relays reliably follow, optionally flooding the bus so each nINT
@@ -75,8 +71,7 @@ u8_t pcf8574Cfg[HAL_PCF8574] = {
 // ######################################### Local variables #######################################
 
 static u8_t pcf8574Num = 0;
-static volatile u8_t pcf8574IRQactive = 0;				// 1 while a read/drain chain is in progress
-static u8_t pcf8574IRQrearm = 0;						// consecutive level re-arm reads (runaway guard)
+static volatile u8_t pcf8574IRQactive = 0;				// 1 while a read is in progress
 #if debugSTRESS
 static volatile u8_t pcf8574TestActive = 0;				// 1 = stress test: count only, suppress event/telemetry notify
 static u32_t xIDI_ChanCnt[HAL_IDI] = { 0 };				// per-input leading-edge counter (stress-test observable)
@@ -90,7 +85,6 @@ pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 u8_t ReadPrv, ReadNow, ReadChg, Bit0to1, Bit1to0;
 #if (debugCOUNTERS)
 	u32_t xIDI_IRQsLost, xIDI_IRQread, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, xIDI_IRQyield;
-	u32_t xIDI_IRQrearm, xIDI_IRQrearmCap;
 #endif
 
 // ##################################### Forward Declarations ######################################
@@ -108,9 +102,13 @@ static int pcf8574ReadData(pcf8574_t * psPCF8574) {
 
 /**
  * @brief	Write data from Wbuf to device
+ * @note	i2cW_FB (pri=1, blk=1) to match pca9555Write(): actuator writes go to the FRONT of the queue
+ *			and the caller gets the REAL transfer result, not just "queued OK". Blocking is what makes
+ *			Flush retry, Verify and Config error handling possible at all; fire-and-forget (i2cW) made
+ *			all three untestable. Never called from an ISR (the nINT ISR queues i2cRC directly).
  */
 static int pcf8574Write(pcf8574_t * psPCF8574, u8_t U8) {
-	return halI2C_Queue(psPCF8574->psI2C, i2cW, &U8, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
+	return halI2C_Queue(psPCF8574->psI2C, i2cW_FB, &U8, sizeof(u8_t), (u8_t *)NULL, 0, (i2cq_p1_t)NULL, (i2cq_p2_t)NULL);
 }
 
 // ######################################### IRQ support ###########################################
@@ -173,24 +171,12 @@ static void pcf8574ReadHandler(void * Arg) {
 		pcf8574ReportStatus(NULL);
 	ReadPrv = ReadNow;
 
-	/* Drain the LEVEL-latched nINT. The read above released nINT; if GPIO13 is STILL low a further
-	 * input change is pending -> queue another read (staying masked & active). When nINT is finally
-	 * high the latch is empty -> re-arm the GPIO interrupt and end the drain. The bounded guard
-	 * prevents a tight read-loop on a permanently stuck/oscillating line (HW fault: safety-poll TODO). */
+	/* nINT is LEVEL-latched and the read above released it. If a further input change is already
+	 * pending nINT is still low, so re-arming re-fires the interrupt immediately -> next read. The
+	 * level trigger IS the loop: no hand-rolled drain, every pass goes through the queue (fair to the
+	 * other devices), and this handler never re-queues (so it cannot recurse via inline-exec). */
 #if (cmakePLTFRM == HW_KC868A6)
-	if (gpio_get_level(sPCF8574_Pin.pin) == 0 && ++pcf8574IRQrearm <= pcf8574IRQ_REARM_MAX) {
-		incrCOUNTER(xIDI_IRQrearm);
-		if (halI2C_Queue(psPCF8574->psI2C, i2cRC, NULL, 0, &psPCF8574->Rbuf, sizeof(u8_t),
-				(i2cq_p1_t)pcf8574ReadHandler, (i2cq_p2_t)Arg) >= erSUCCESS) {
-			IF_SYSTIMER_START(debugTIMING, stPCF8574);
-			return;										// draining: stay masked & active
-		}												// else queue failed -> fall through, re-arm IRQ
-	}
-	if (pcf8574IRQrearm > pcf8574IRQ_REARM_MAX) {
-		incrCOUNTER(xIDI_IRQrearmCap);
-	}
-	pcf8574IRQrearm = 0;
-	pcf8574IRQactive = 0;								// drain complete
+	pcf8574IRQactive = 0;
 	halGPIO_IRQenable(sPCF8574_Pin.pin);				// re-arm the (level) nINT interrupt
 #endif
 }
@@ -436,8 +422,8 @@ exit:
 static int pcf8574ReportStatus(report_t * psR) {
 	int iRV = xReport(psR, "\tPrv=x%02X  Now=x%02X  Chg=x%02X  0to1=x%02X  1to0=x%02X", ReadPrv, ReadNow, ReadChg, Bit1to0, Bit0to1);
 #if(debugCOUNTERS)
-	iRV += xReport(psR, "  Lost=%lu  Read=%lu  Yield=%lu  Set=%lu  Clr=%lu  Dup=%lu  Rearm=%lu  RearmCap=%lu",
-		xIDI_IRQsLost, xIDI_IRQread, xIDI_IRQyield, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, xIDI_IRQrearm, xIDI_IRQrearmCap);
+	iRV += xReport(psR, "  Lost=%lu  Read=%lu  Yield=%lu  Set=%lu  Clr=%lu  Dup=%lu",
+		xIDI_IRQsLost, xIDI_IRQread, xIDI_IRQyield, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup);
 #endif
 	return iRV = xReport(psR, fmTST(aNL) ? strNLx2 : strNL);
 }
@@ -490,7 +476,7 @@ int pcf8574StressTest(report_t * psR) {
 	u32_t base[HAL_IDI];
 	for (u8_t ch = 0; ch < HAL_IDI; ++ch) base[ch] = xIDI_ChanCnt[ch];
 #if (debugCOUNTERS)
-	u32_t bRd = xIDI_IRQread, bSet = xIDI_BitsSet, bDup = xIDI_BitsDup, bRe = xIDI_IRQrearm, bReC = xIDI_IRQrearmCap, bYd = xIDI_IRQyield;
+	u32_t bRd = xIDI_IRQread, bSet = xIDI_BitsSet, bDup = xIDI_BitsDup, bYd = xIDI_IRQyield;
 #endif
 	pcf8574TestActive = 1;								// count at capture layer, suppress event/telemetry notify
 	pcf8574DevSetState(outDev, 0x3F, 0);				// ensure all relays OFF to start
@@ -532,10 +518,8 @@ int pcf8574StressTest(report_t * psR) {
 	iRV += xReport(psR, "Totals: expect=%lu  actual=%lu  LOST=%d  extra=%d  worst=ch%d(%+ld)" strNL,
 			(u32_t)(N * HAL_IDI), totAct, lost, extra, worstCh, worstErr);
 #if (debugCOUNTERS)
-	iRV += xReport(psR, "Diag d: Read=%lu  Set=%lu  Dup=%lu  Rearm=%lu  RearmCap=%lu  Yield=%lu" strNL,
-			xIDI_IRQread - bRd, xIDI_BitsSet - bSet, xIDI_BitsDup - bDup, xIDI_IRQrearm - bRe, xIDI_IRQrearmCap - bReC, xIDI_IRQyield - bYd);
-	if ((xIDI_IRQrearmCap - bReC) != 0)
-		iRV += xReport(psR, "  ** RearmCap != 0: nINT held low (EMI/oscillation/stuck strap) **" strNL);
+	iRV += xReport(psR, "Diag d: Read=%lu  Set=%lu  Dup=%lu  Yield=%lu" strNL,
+			xIDI_IRQread - bRd, xIDI_BitsSet - bSet, xIDI_BitsDup - bDup, xIDI_IRQyield - bYd);
 #endif
 	iRV += xReport(psR, "RESULT: %s   (lost=%d, extra=%d)" strNL, lost == 0 ? "PASS (no pulses lost)" : "FAIL (pulses LOST)", lost, extra);
 	return iRV;
@@ -549,6 +533,14 @@ int pcf8574StressTest(report_t * psR) {
 
 /*
  * File history:
+ * 2026-07-15  Andre M. Maree
+ *   Removed the hand-rolled nINT drain loop (pcf8574IRQ_REARM_MAX / pcf8574IRQrearm and the re-read
+ *   chain). With GPIO_INTR_LOW_LEVEL the interrupt mechanism already re-fires while nINT is still
+ *   asserted, so re-arming alone suffices: same behaviour, iterative via the queue (fair to the other
+ *   I2C devices) instead of a chain that monopolised the I2C task - and the handler no longer calls
+ *   halI2C_Queue, so it cannot recurse through the v2 inline-exec path. Level trigger RETAINED: it is
+ *   what avoids the ESP32 edge-loss race (esp-idf #9746) and the nINT-stuck-low/no-more-edges wedge.
+ *
  * 2026-07-01  Andre M. Maree
  *   PCF8574 nINT (KC868-A6, input @0x22) pulse-capture reliability rework. Scope beyond this file:
  *   halGPIO_IRQenable/disable wrappers (hal_gpio.c/.h); halMemory* + halI2C_GetOp* marked IRAM_ATTR
