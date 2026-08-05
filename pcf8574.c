@@ -211,6 +211,21 @@ static void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 
 // ###################################### Global functions #########################################
 
+/**
+ * @brief	Build the byte actually sent to the device for its current commanded state
+ * @note	ONE definition of the wire format, shared by Config, Flush and Verify so they can never
+ *			disagree. Output (Mask=0) bits carry Wbuf, inverted if the hardware inverts (74HCT14 on
+ *			the KC868-A6 relay device). Input/unused (Mask=1) bits are written HIGH - the PCF8574 is
+ *			quasi-bidirectional, a bit must be written 1 to function as an input. The previous Flush
+ *			did the opposite (&= ~Mask), DRIVING every input bit hard low: harmless on 0x24 where
+ *			bits 6/7 float unused, but on any mixed in/out device it would kill the inputs and sink
+ *			current from whatever drives them high.
+ */
+static u8_t pcf8574WireByte(pcf8574_t * psPCF8574) {
+	u8_t U8 = psPCF8574->fInvOUT ? ~psPCF8574->Wbuf : psPCF8574->Wbuf;
+	return U8 | psPCF8574->Mask;
+}
+
 int pcf8574Flush(pcf8574_io_t eChan) {
 	int Beg, End, iRV = 0;
 	// set range based on parameter
@@ -220,35 +235,53 @@ int pcf8574Flush(pcf8574_io_t eChan) {
 	for (int i = Beg; i <= End; ++i) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
 		if (psPCF8574->fDirty) {
-			IF_RPT(debugFLUSH, " [Beg=%d Now=%d End=%d D=x%02X", Beg, i, End, psPCF8574->Wbuf);
-			u8_t U8inv = psPCF8574->fInvOUT ? ~psPCF8574->Wbuf : psPCF8574->Wbuf;
-			IF_RP(debugFLUSH, "->x%02X", U8inv);
-			U8inv &= ~psPCF8574->Mask;
-			IF_RP(debugFLUSH, "->x%02X]", U8inv);
-			pcf8574Write(psPCF8574, U8inv);
-			psPCF8574->fDirty = 0;
-			++iRV;
+			u8_t U8inv = pcf8574WireByte(psPCF8574);
+			IF_RPT(debugFLUSH, " [Beg=%d Now=%d End=%d D=x%02X->x%02X]", Beg, i, End, psPCF8574->Wbuf, U8inv);
+			/* i2cW_FB returns the REAL transfer result, so only mark clean once the write actually
+			 * reached the device. On failure fDirty stays set and the next actuate cycle retries -
+			 * the previous unconditional clear silently ABANDONED the commanded state on any I2C
+			 * error, leaving relays wherever the failure left them with nothing owing a retry. */
+			if (pcf8574Write(psPCF8574, U8inv) >= erSUCCESS)
+				psPCF8574->fDirty = 0;
+			++iRV;										// count attempted, caller Verifies/retries via fDirty
 		}
 	}
 	IF_RP(debugFLUSH && iRV, " iRV=%d" strNL, iRV);
 	return iRV;
 }
 
+static u32_t pcfSuccessCount, pcfResetCount;			// Verify: read-back matched / corrected (cf pca9555)
+
 int	pcf8574Verify(pcf8574_io_t eChan) {
-#if 0
 	int Beg, End, iRV = 0;
 	// set range based on parameter
-	if (eChan == -1)	{ Beg = 0; End = pcf8574Num; }
+	if (eChan == -1)	{ Beg = 0; End = pcf8574Num-1; }
 	else				{ Beg = End = eChan / 8; }
-	//loop through range and if dirty, flush
-	for (int i = Beg; i < End; ++i) {
+	for (int i = Beg; i <= End; ++i) {
 		pcf8574_t * psPCF8574 = &sPCF8574[i];
-		// add additional code similar to pca9555Verify()
+		/* NEVER read the pulse-capture device (0x22, fInvINP): any read of a PCF8574 releases its
+		 * latched nINT, so a verify read here would consume a pulse edge behind the IRQ path's back.
+		 * A pure-input device has no driven state to verify anyway. */
+		if (psPCF8574->fInvINP || psPCF8574->Mask == 0xFF)
+			continue;
+		u8_t Expect = pcf8574WireByte(psPCF8574);
+		int rv = pcf8574ReadData(psPCF8574);
+		if (rv < erSUCCESS)								// read failed: the I2C task's ErrorHandler owns bus
+			continue;									//  recovery - never compare stale data (cf pca9555Verify)
+		if (psPCF8574->Rbuf == Expect) {
+			++pcfSuccessCount;
+			continue;
+		}
+		/* Read OK but the outputs drifted (EMI/transient corrupted the output latch on a working
+		 * bus): re-drive the commanded state, same remedy as pca9555Verify. Genuine bus errors are
+		 * handled by the I2C task's ErrorHandler via the rv check above. */
+		++pcfResetCount;
+		SL_NOT("A=x%02X  W=x%02X  R=x%02X  Err=%lu vs %lu", psPCF8574->psI2C->Addr, Expect,
+			psPCF8574->Rbuf, pcfResetCount, pcfSuccessCount);
+		pcf8574Write(psPCF8574, Expect);
+		++iRV;
 	}
 	return iRV;
-#else
-	return 0;
-#endif
 }
 
 int pcf8574BitFunction(pcf8574bit_func_e BitFunc, u8_t eChan, bool NewState) {
@@ -379,11 +412,20 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	int Idx = psI2C->DevIdx;
 	pcf8574_t * psPCF8574 = &sPCF8574[Idx];
 #if (cmakePLTFRM == HW_KC868A6)						// device specific IN/OUT config
-	iRV = pcf8574Write(psPCF8574, psPCF8574->Mask = pcf8574Cfg[Idx]);
-	if (iRV >= erSUCCESS && psI2C->Addr == 0x24) {
-		psPCF8574->Wbuf = 0x00;
-		psPCF8574->fDirty = 1;
-	}
+	/* Role flags BEFORE the config write - pcf8574WireByte() depends on fInvOUT, and these used to
+	 * be set in the once-off block AFTER the write, which is exactly why the old code wrote the raw
+	 * Mask: on 0x24 that drove P0-5 LOW -> 74HCT14 inverted HIGH -> ULN2003 -> ALL SIX RELAYS ON
+	 * until Flush(-1) below restored them. ~1ms on a clean boot, but UNBOUNDED when Config re-runs
+	 * from I2C error recovery - actuated field hardware (valves) must never glitch on a recovery
+	 * cycle. WireByte gives: first config (Wbuf=0) -> 0xFF = the PCF8574 POR state, relays OFF and
+	 * inputs weak-high; recovery re-config -> the COMMANDED state, so an I2C error no longer resets
+	 * the relays to off behind the actuator layer's back (Wbuf is deliberately NOT zeroed here). */
+	psPCF8574->Mask = pcf8574Cfg[Idx];
+	if (psI2C->Addr == 0x22)	psPCF8574->fInvINP = 1;	// inputs are active-low (opto inverts)
+	if (psI2C->Addr == 0x24)	psPCF8574->fInvOUT = 1;	// relays are active-low (74HCT14 inverts)
+	iRV = pcf8574Write(psPCF8574, pcf8574WireByte(psPCF8574));
+	if (iRV >= erSUCCESS && psPCF8574->fInvOUT)
+		psPCF8574->fDirty = 1;							// Flush(-1) below (re)drives the commanded state
 #endif
 	if (iRV < erSUCCESS) {
 		halEventUpdateDevice(devMASK_PCF8574, 0);		/* device not functional */
@@ -394,7 +436,6 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 1, 100);
 #if (cmakePLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) {
-			psPCF8574->fInvINP = 1;						// inputs are active-low (opto inverts)
 			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));	// pin=INPUT, intr_type=LOW_LEVEL (not yet armed)
 			/* Bootstrap: clear any already-asserted nINT and seed ReadPrv from a REAL reading BEFORE
 			 * arming the level IRQ, so the handler has a valid baseline and a pre-asserted latch can
@@ -403,9 +444,6 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 			if (pcf8574ReadData(psPCF8574) == erSUCCESS)
 				ReadPrv = (u8_t) (~psPCF8574->Rbuf) & psPCF8574->Mask;
 			halGPIO_IRQconfig(sPCF8574_Pin.pin, pcf8574IntHandler, (void *)Idx);	// arm IRQ last
-		}
-		if (psI2C->Addr == 0x24) {
-			psPCF8574->fInvOUT = 1;
 		}
 #endif
 	}
