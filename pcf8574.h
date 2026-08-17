@@ -214,7 +214,14 @@ int pcf8574Report(struct report_t * psR);
 
 // Pulse-counter stress self-test (KC868-A6 relay->opto loopback); defined ONLY when the pcf8574.c
 // debugSTRESS bit is set. Not wired to any key - call manually (e.g. at startup) if required.
-int pcf8574StressTest(struct report_t * psR);
+int pcf8574StressTest(struct report_t * psR, int fE2E);
+
+/**
+ * @brief	Atomically take (return and zero) the pending captured-edge count for a channel.
+ * @note	Producer = pcf8574ReadHandler (I2C task), consumer = Events task. The task notify only
+ *			signals PRESENCE; this carries the COUNT, so merged wakeups lose nothing.
+ */
+u32_t pcf8574PendingTake(u8_t eChan);
 
 #ifdef __cplusplus
 }

@@ -13,11 +13,13 @@
 
 // ########################################## Macros ###############################################
 
-#define	debugFLAG					0xF00C
+#define	debugFLAG					0xF004
 #define	debugCONFIG					(debugFLAG & 0x0001)
 #define	debugFLUSH					(debugFLAG & 0x0002)
 #define	debugCOUNTERS				(debugFLAG & 0x0004)
-#define	debugSTRESS					(debugFLAG & 0x0008)		// compile in the pulse-counter stress self-test
+/* Stress self-test moved under the BENCH umbrella (was debugFLAG bit 0x0008, ie compiled into
+ * EVERY build including field images). benchTEST_PCF_STRESS also wires the c-V console key. */
+#define	debugSTRESS					(benchTEST_PCF_STRESS)
 
 #define	debugTIMING					(debugFLAG_GLOBAL & debugFLAG & 0x1000)
 #define	debugTRACK					(debugFLAG_GLOBAL & debugFLAG & 0x2000)
@@ -83,6 +85,16 @@ static u32_t xIDI_ChanCnt[HAL_IDI] = { 0 };				// per-input leading-edge counter
 
 pcf8574_t sPCF8574[HAL_PCF8574] = { NULL };
 u8_t ReadPrv, ReadNow, ReadChg, Bit0to1, Bit1to0;
+static u32_t xIDI_Pending[HAL_IDI] = { 0 };				// per-channel edges captured but not yet consumed
+
+/**
+ * @brief	Atomically take (return and zero) the pending edge count for a channel.
+ * @note	Called by the Events task; the producer is pcf8574ReadHandler in the I2C task. u32 +
+ *			__atomic keeps the exchange safe across cores (xtensa S32C1I).
+ */
+u32_t pcf8574PendingTake(u8_t eChan) {
+	return __atomic_exchange_n(&xIDI_Pending[eChan], 0, __ATOMIC_RELAXED);
+}
 #if (debugCOUNTERS)
 	u32_t xIDI_IRQsLost, xIDI_IRQread, xIDI_BitsSet, xIDI_BitsClr, xIDI_BitsDup, xIDI_IRQyield;
 #endif
@@ -145,19 +157,27 @@ static void pcf8574ReadHandler(void * Arg) {
 #else
 	ReadNow >>= __builtin_ctzl((u32_t) psPCF8574->Mask);
 #endif
-	IF_SYSTIMER_STOP(debugTIMING, stPCF8574);
 	if (ReadNow != ReadPrv) {
 		ReadChg = ReadPrv ^ ReadNow;					// XOR leave changed (0->1 or 1->0) bits
 		Bit0to1 = ReadChg & ReadNow;
 		Bit1to0 = ReadChg & ReadPrv;					// required if trailing edge important
 		if (Bit0to1) {									// If any leading edge changes
 			EventMask = (u32_t) Bit0to1 << evtFIRST_IDI;
-#if debugSTRESS
+			/* COUNT here, SIGNAL via the notify. The u32 task-notification carries PRESENCE only:
+			 * when Events had not woken before the next edge burst arrived, eSetBits merged the
+			 * bursts and every merged channel lost a pulse - the E2E stress measured 17.3% gone
+			 * (827/1000 per channel, deficit IDENTICAL across channels = whole bursts merging
+			 * during Events scheduling latency). Pending counts are accumulated HERE (I2C task
+			 * context, atomic vs the Events-task exchange in pcf8574PendingTake) so a merged
+			 * wakeup consumes the full tally and nothing is lost. */
 			for (u8_t b = Bit0to1, ch = 0; b; b >>= 1, ++ch) {
-				if (b & 1)								// count each input's leading edge at the
-					++xIDI_ChanCnt[ch];					// capture layer (pre notify-merge); stress observable
-			}
+				if (b & 1) {
+					__atomic_fetch_add(&xIDI_Pending[ch], 1, __ATOMIC_RELAXED);
+#if debugSTRESS
+					++xIDI_ChanCnt[ch];					// capture-layer ground truth for the stress test
 #endif
+				}
+			}
 			if (EventsHandle && !pcf8574TestActive)		// Events ready & not stress-testing? (NULL until
 				xTaskNotify(EventsHandle, EventMask, eSetBits);	// vEventsStart@main:182; suppress test flood)
 			incrCOUNTER(xIDI_BitsSet);
@@ -206,7 +226,11 @@ static void IRAM_ATTR pcf8574IntHandler(void * Arg) {
 		incrCOUNTER(xIDI_IRQyield);
 		portYIELD_FROM_ISR();
 	}
-	IF_SYSTIMER_START(debugTIMING, stPCF8574);
+	/* NO instrumentation calls here: this ISR must be IRAM-COMPLETE. The IF_SYSTIMER_START that
+	 * stood here reached flash-resident xSysTimerStart, and an nINT during any flash write (cache
+	 * disabled - syslog/LittleFS/NVS) was a Guru Cache-error panic. Latent since 2026-07 (the
+	 * capture-only stress generated no flash traffic to collide with); the E2E stress found it in
+	 * 15s. The stPCF8574 latency timer (paired STOP in ReadHandler) is deleted with it. */
 }
 
 // ###################################### Global functions #########################################
@@ -433,7 +457,6 @@ int	pcf8574Config(i2c_di_t * psI2C) {
 	}
 	// once off init....
 	if (psI2C->CFGerr == 0) {
-		IF_SYSTIMER_INIT(debugTIMING, stPCF8574, stMICROS, "PCF8574", 1, 100);
 #if (cmakePLTFRM == HW_KC868A6)
 		if (psI2C->Addr == 0x22) {
 			ESP_ERROR_CHECK(gpio_config(&sPCF8574_Pin.esp32));	// pin=INPUT, intr_type=LOW_LEVEL (not yet armed)
@@ -501,7 +524,7 @@ int pcf8574Report(report_t * psR) {
  *			channels undercount uniformly, first suspect relays not following at this speed:
  *			raise pcf8574TEST_TON/TOFF_MS.
  */
-int pcf8574StressTest(report_t * psR) {
+int pcf8574StressTest(report_t * psR, int fE2E) {
 #if (cmakePLTFRM == HW_KC868A6)
 	int outDev = -1;
 	for (u8_t i = 0; i < pcf8574Num; ++i)
@@ -516,7 +539,12 @@ int pcf8574StressTest(report_t * psR) {
 #if (debugCOUNTERS)
 	u32_t bRd = xIDI_IRQread, bSet = xIDI_BitsSet, bDup = xIDI_BitsDup, bYd = xIDI_IRQyield;
 #endif
-	pcf8574TestActive = 1;								// count at capture layer, suppress event/telemetry notify
+	/* fE2E=0: original capture-layer-only run - notifies suppressed, nothing reaches Events/TB.
+	 * fE2E=1: END-TO-END - notifies, per-event publishes and the sumX reset protocol all run, so
+	 * the host total must equal cycles x channels x scale. Exercises the V1 stale-notify phantom
+	 * (coincident cross-channel events) and, with benchTEST_AEP_QSMALL, the V2 queue-full refusal
+	 * (deltas must accumulate through the full window and arrive after the drain). */
+	pcf8574TestActive = fE2E ? 0 : 1;					// count at capture layer; E2E lets events flow
 	pcf8574DevSetState(outDev, 0x3F, 0);				// ensure all relays OFF to start
 	vTaskDelay(pdMS_TO_TICKS(pcf8574TEST_TOFF_MS));
 
@@ -539,7 +567,8 @@ int pcf8574StressTest(report_t * psR) {
 	vTaskDelay(pdMS_TO_TICKS(100));						// let the final drain settle (relays now idle)
 	pcf8574TestActive = 0;								// resume normal event/telemetry notify
 
-	int iRV = xReport(psR, "PCF8574 stress: cycles=%lu  tON=%d  tOFF=%d  contend=%d(x%d)  dur=%lums" strNL,
+	int iRV = xReport(psR, "PCF8574 stress (%s): cycles=%lu  tON=%d  tOFF=%d  contend=%d(x%d)  dur=%lums" strNL,
+			fE2E ? "E2E, host must total cycles x chan x scale" : "capture only",
 			N, pcf8574TEST_TON_MS, pcf8574TEST_TOFF_MS, pcf8574TEST_CONTEND, pcf8574TEST_CONTEND ? pcf8574TEST_CONTEND_N : 0, durMs);
 	iRV += xReport(psR, "In   Count  Expect   Error" strNL);
 	u32_t totAct = 0; int lost = 0, extra = 0, worstCh = 0; long worstErr = 0;
