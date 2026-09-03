@@ -187,7 +187,7 @@ static void pcf8574ReadHandler(void * Arg) {
 	} else {
 		incrCOUNTER(xIDI_BitsDup);
 	}
-	if (debugTRACK && (OPT_GET(dbgGDIO) & 2))
+	if (debugTRACK && (OPT_GET(dbgXDIO) & 2))
 		pcf8574ReportStatus(NULL);
 	ReadPrv = ReadNow;
 
