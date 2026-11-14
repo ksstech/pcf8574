@@ -148,6 +148,8 @@ static void pcf8574ReadHandler(void * Arg) {
 	IF_myASSERT(debugTRACK, eDev < HAL_PCF8574);
 	pcf8574_t * psPCF8574 = &sPCF8574[eDev];
 	u32_t EventMask = 0;
+	if (i2cqReqResult != ESP_OK)						// read failed: Rbuf not filled, keep ReadPrv; nINT is
+		goto rearm;										// still latched, so the re-arm below retries the read
 	// Invert, if required, to get real value read
 	ReadNow = psPCF8574->fInvINP ? ~psPCF8574->Rbuf : psPCF8574->Rbuf;
 	ReadNow &= psPCF8574->Mask;							// Remove OUTput bits
@@ -195,6 +197,7 @@ static void pcf8574ReadHandler(void * Arg) {
 	 * pending nINT is still low, so re-arming re-fires the interrupt immediately -> next read. The
 	 * level trigger IS the loop: no hand-rolled drain, every pass goes through the queue (fair to the
 	 * other devices), and this handler never re-queues (so it cannot recurse via inline-exec). */
+rearm: ;
 #if (cmakePLTFRM == HW_KC868A6)
 	pcf8574IRQactive = 0;
 	halGPIO_IRQenable(sPCF8574_Pin.pin);				// re-arm the (level) nINT interrupt
